@@ -1,0 +1,431 @@
+
+i have hotel managemet system running using qlo apps im self hosting and the last time i pulled update was 2025 . how do i get the latest qlo apps featueres from github
+
+Worked for 8s
+You can update your self-hosted QloApps Hotel Management System directly from GitHub without rebuilding the hotel website or reinstalling the system.
+
+However, because your current installation dates back to 2025, I recommend a controlled upgrade rather than simply running git pull.
+
+The process should cover:
+
+Identify your current QloApps version and Git branch.
+
+Check the latest official GitHub release and available features.
+
+Back up your database and website files.
+
+Check the changes between your installed version and the latest version.
+
+Apply the updates in the correct order.
+
+Run database updates and check the hotel booking system.
+
+Test the receptionist, reservations, room management, payments and front office.
+
+Important: Your existing hotel data, room configurations, bookings, customer records and customisations must remain intact.
+
+1. What is the latest QloApps version?
+I checked the official repository:
+
+Official repository: QloApps on GitHub
+
+Releases: Official QloApps releases
+
+Documentation: QloApps documentation
+
+Latest published release found: 1.7.0
+QloApps 1.7.0 includes several changes:
+
+Feature
+
+What it adds
+
+PHP 8.1–8.4 support
+
+Updated PHP compatibility
+
+MySQL 8 compatibility
+
+Improved database compatibility
+
+Bed types
+
+Configure different bed types for room categories
+
+Multiple room management
+
+Add or update several rooms at once
+
+Advanced pricing
+
+Apply pricing rules across multiple room types
+
+Booking restrictions
+
+Apply multiple restrictions to advanced prices
+
+Service products
+
+Add and edit services during booking management
+
+Properties controller
+
+Improved property management on the front office
+
+Source: QloApps 1.7.0 release notes.
+
+One important distinction: GitHub has a develop branch and published release tags. The develop branch can contain unfinished changes that aren't part of a stable release. I would not deploy it directly to your live hotel system.
+
+2. There are two ways to get newer code
+Method
+
+Description
+
+My recommendation
+
+Stable release
+
+Install the latest published release
+
+Recommended
+
+Develop branch
+
+Get the newest code developers are working on
+
+Testing only
+
+The GitHub repository currently shows over 6,500 commits, so there may be improvements beyond the published 1.7.0 release. However, those changes may not be production-ready. 
+
+GitHub
++1
+
+3. First, inspect your existing installation
+I want to establish exactly how your current installation connects to GitHub before changing anything.
+
+Connect to your server using SSH.
+
+Navigate to the directory containing QloApps. For example:
+
+cd /path/to/your/qloapps
+
+Run these commands one at a time:
+
+Command 1 – Check your current Git branch
+
+git branch --show-current
+
+Command 2 – Check your current version
+
+git describe --tags --always
+
+Command 3 – Check your GitHub connection
+
+git remote -v
+
+Command 4 – Check for locally modified files
+
+git status
+
+Command 5 – Check the last update
+
+git log -1 --format="%h %ad %s" --date=short
+
+If you get fatal: not a git repository, stop. Your deployed installation may not contain its original Git repository.
+
+4. Check for updates without installing them
+If the directory is a Git repository, run:
+
+git fetch origin --prune --tags
+
+This downloads GitHub's latest branch and tag information without replacing your installed application files.
+
+If your branch is develop, you can inspect the available updates using:
+
+git log --oneline HEAD..origin/develop
+
+And inspect the size of the changes:
+
+git diff --stat HEAD..origin/develop
+
+Do not run git pull, git reset or git checkout yet.
+
+5. Back up before upgrading
+Before applying any update, you need two backups:
+
+Database: Export your QloApps database through phpMyAdmin.
+
+Website files: Create a complete copy of the QloApps installation, including configuration, modules, themes, images and overrides.
+
+Your database is particularly important because it contains your hotel bookings, customers, rooms and other operational records.
+
+Also, don't change your PHP or MariaDB version as part of this initial inspection. The current GitHub repository documents PHP 8.2–8.5 and MySQL 5.7–8.4 compatibility, but your existing installation needs its own compatibility check. 
+
+GitHub
+
+6. Let's inspect your Lush View Hotel installation first
+I have your earlier QloApps setup details, including version 1.7.0.0 and the lushview_qloapp database.
+
+I want to avoid breaking your existing receptionist access, booking records or hotel configuration.
+
+Where is your QloApps installation hosted?
+
+1. Hosting environment
+
+
+GreenGeeks hosting (cPanel)
+
+VPS / Ubuntu server
+
+Other hosting
+2. How do you access the server?
+
+
+SSH / Terminal
+
+cPanel File Manager only
+
+Both SSH and cPanel
+3. Current QloApps version
+
+
+1.7.0.0
+
+Older than 1.7.0.0
+
+I don't know
+My recommendation is to first inspect your installation, then prepare a staging copy and test the GitHub updates there. Once everything works, we can deploy the tested changes to Lush View Hotel's live system.
+
+My QloApps hosting: greengeeks. Server access: cpanel. Current version: 1.7.0.0. Guide me through inspecting and safely updating my installation.
+
+Worked for 11s
+Since your Lush View Hotel system runs on GreenGeeks cPanel, you can carry out the inspection and backup without SSH access.
+
+Your current version is QloApps 1.7.0.0. We will treat this as an existing production system, not a fresh installation.
+
+I recommend doing the work in four stages:
+
+Inspect your current installation.
+
+Create complete backups.
+
+Prepare a separate staging installation for testing updates.
+
+Apply the tested update to the live hotel system.
+
+Do not delete, overwrite or replace any existing QloApps files yet.
+
+Stage 1 – Inspect your installation
+Step 1. Open GreenGeeks cPanel
+Log in to your GreenGeeks account.
+
+Open cPanel.
+
+Find File Manager.
+
+Open the directory containing your QloApps installation.
+
+Your installation may be inside:
+
+public_html/
+or a subdirectory such as:
+
+public_html/hotel/
+The correct directory is the one containing files and folders such as:
+
+config/
+
+classes/
+
+controllers/
+
+modules/
+
+themes/
+
+override/
+
+img/
+
+install/ (if retained)
+
+Take a screenshot of the directory before making changes.
+
+Step 2. Confirm the installed files
+In File Manager:
+
+Open the config folder.
+
+Look for settings.inc.php.
+
+Right-click and select View (do not edit it).
+
+Look for these entries:
+
+define('_DB_SERVER_', '...');
+define('_DB_NAME_', '...');
+define('_DB_USER_', '...');
+define('_DB_PREFIX_', '...');
+
+Record:
+
+Database name.
+
+Database username.
+
+Table prefix.
+
+Do not send me your database password.
+
+Also check whether these directories exist:
+
+modules/
+override/
+themes/
+These can contain custom changes that a standard upgrade might overwrite.
+
+Step 3. Check your PHP version
+Return to cPanel.
+
+Open MultiPHP Manager.
+
+Find the domain running QloApps.
+
+Record its assigned PHP version.
+
+Do not change it yet.
+
+QloApps 1.7.0's published requirements include PHP 8.1 or later. The current repository README specifies PHP 8.2–8.5, so we should check the exact compatibility requirements before changing anything. 
+
+QloApps Documentation
++1
+
+Step 4. Check your database version
+Open phpMyAdmin from cPanel.
+
+Look at the server information on the home screen.
+
+Record the MySQL or MariaDB version.
+
+QloApps 1.7.0 lists MySQL 5.7+ and supported MariaDB versions. 
+
+QloApps Documentation
++1
+
+Stage 2 – Create backups
+Do this before testing any upgrade.
+
+Step 5. Back up your website files
+Open cPanel File Manager.
+
+Locate the main QloApps installation directory.
+
+Select all the QloApps files and folders.
+
+Click Compress.
+
+Choose ZIP Archive.
+
+Name it:
+
+lushview-qloapps-backup-2026-11-04.zip
+Save the archive outside public_html if possible.
+
+Wait for compression to finish.
+
+Check that the ZIP file exists and has a reasonable file size.
+
+Do not delete your original files.
+
+Step 6. Back up the database
+Open phpMyAdmin.
+
+Select your QloApps database.
+
+Click Export.
+
+Choose Quick.
+
+Select SQL as the format.
+
+Click Export.
+
+Save the downloaded file as:
+
+lushview-qloapps-database-2026-11-04.sql
+Keep both backups somewhere outside your hosting account too, such as your computer.
+
+Stage 3 – Understand what actually needs updating
+I checked the official GitHub release page again.
+
+Important finding
+QloApps 1.7.0 is still the latest published stable release listed on GitHub. Your reported version, 1.7.0.0, appears to correspond to that release. 
+
+GitHub
+
+However, the develop branch continues to receive changes. These include newer code improvements and bug fixes that haven't necessarily been included in a stable release. 
+
+GitHub
++1
+
+So we have two different objectives:
+
+Stable upgrade: There may be no newer stable version to install yet.
+
+New GitHub development changes: We can review these and selectively test suitable improvements.
+
+I would choose the second approach only after backing up and setting up a staging copy.
+
+Stage 4 – What I need from you
+Let's complete the inspection before touching the live installation.
+
+Please send me these four things:
+
+Inspection checklist
+
+
+I located the main QloApps installation folder.
+PHP version assigned to the hotel domain
+
+
+8.1
+
+8.2
+
+8.3
+
+8.4
+
+8.5
+
+Other / Unknown
+Database server version
+
+e.g. MariaDB 10.6
+Backup status
+
+
+Not started
+
+Website files backed up
+
+Database backed up
+
+Both backups completed
+You can also upload screenshots of:
+
+Your QloApps root directory in File Manager.
+
+MultiPHP Manager.
+
+phpMyAdmin server information.
+
+My target: Get Lush View Hotel onto a properly backed-up, tested QloApps installation with the latest suitable fixes and features, without losing existing bookings, customers, room settings or receptionist access.
+
+
+Writing code? Meet Codex in the desktop app
+Pair with Codex in your terminal or IDE, free for a limited time in your ChatGPT plan.
+
+
+
+
