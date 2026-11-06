@@ -1,0 +1,253 @@
+<?php
+/**
+* NOTICE OF LICENSE
+*
+* This source file is subject to the Open Software License version 3.0
+* that is bundled with this package in the file LICENSE.md
+* It is also available through the world-wide-web at this URL:
+* https://opensource.org/license/osl-3-0-php
+* If you did not receive a copy of the license and are unable to
+* obtain it through the world-wide-web, please send an email
+* to support@qloapps.com so we can send you a copy immediately.
+*
+* DISCLAIMER
+*
+* Do not edit or add to this file if you wish to upgrade this module to a newer
+* versions in the future. If you wish to customize this module for your needs
+* please refer to https://store.webkul.com/customisation-guidelines for more information.
+*
+* @author Webkul IN
+* @copyright Since 2010 Webkul
+* @license https://opensource.org/license/osl-3-0-php Open Software License version 3.0
+ */
+
+class HotelBookingDocument extends ObjectModel
+{
+    public $id_htl_booking_document;
+    public $id_htl_booking;
+    public $title;
+    public $file_type;
+    public $file_name;
+    public $date_add;
+
+    /** @var bool True when the file is a PDF but was rejected for unsafe content. */
+    public $isUnsafePdf = false;
+
+    const FILE_TYPE_IMAGE = 1;
+    const FILE_TYPE_PDF = 2;
+
+    const DOWNLOAD_FILE_PREFIX = 'checkin_document_';
+
+    protected static $accessRights = 0775;
+
+    public static $definition = array(
+        'table' => 'htl_booking_document',
+        'primary' => 'id_htl_booking_document',
+        'fields' => array(
+            'id_htl_booking' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
+            'title' => array('type' => self::TYPE_STRING, 'validate' => 'isCatalogName'),
+            'file_type' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
+            'file_name' => array('type' => self::TYPE_STRING, 'validate' => 'isString'),
+            'date_add' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
+        ),
+    );
+
+    public function __construct($id = null)
+    {
+        $this->file_name = '';
+        parent::__construct($id);
+
+        $this->documentsBaseDir = _PS_MODULE_DIR_.'hotelreservationsystem/documents/booking_guests/';
+        $this->sourceIndexFile = $this->documentsBaseDir.'index.php';
+    }
+
+    public function save($null_values = false, $auto_date = true)
+    {
+        parent::save($null_values, $auto_date);
+
+        if ($this->id) {
+            $this->setFileName();
+            return $this->update();
+        }
+
+        return false;
+    }
+
+    public static function getDocumentsByIdHtlBooking($idHtlBooking)
+    {
+        return Db::getInstance()->executeS(
+            'SELECT *
+            FROM `'._DB_PREFIX_.'htl_booking_document`
+            WHERE `id_htl_booking` = '.(int) $idHtlBooking
+        );
+    }
+
+    public static function getCountByIdHtlBooking($idHtlBooking)
+    {
+        return (int) Db::getInstance()->getValue(
+            'SELECT COUNT(*)
+            FROM `'._DB_PREFIX_.'htl_booking_document`
+            WHERE `id_htl_booking` = '.(int) $idHtlBooking
+        );
+    }
+
+    public function setFileInfoForUploadedDocument($fileName)
+    {
+        $this->fileInfo = Tools::fileAttachment($fileName, false);
+    }
+
+    public function saveDocumentFile()
+    {
+        if (!$this->id) {
+            return false;
+        }
+
+        $this->setDocumentFolder();
+        $this->createDocumentFolder();
+
+        @move_uploaded_file($this->fileInfo['tmp_name'], $this->getDestinationFilePath());
+    }
+
+    public function setDocumentFolder()
+    {
+        if (!isset($this->documentFolder)) {
+            $this->documentFolder = $this->documentsBaseDir.Image::getImgFolderStatic($this->id);
+        }
+    }
+
+    public function createDocumentFolder()
+    {
+        if (!file_exists($this->documentFolder)) {
+            // Trying both methods for setting access rights
+            $mkdir = @mkdir($this->documentFolder, self::$accessRights, true);
+            $chmod = @chmod($this->documentFolder, self::$accessRights);
+
+            // Copy index.php file in the new folder
+            if (($mkdir || $chmod)
+                && !file_exists($this->documentFolder.'index.php')
+                && file_exists($this->sourceIndexFile)
+            ) {
+                return @copy($this->sourceIndexFile, $this->documentFolder.'index.php');
+            }
+        }
+
+        return true;
+    }
+
+    public function getDestinationFilePath()
+    {
+        return $this->documentFolder.$this->id.'.'.$this->getFileExtension();
+    }
+
+    public function setFileType()
+    {
+        $content = @file_get_contents($this->fileInfo['tmp_name']);
+
+        // PDF names can hide keywords with hex escapes (/J#53 is /JS), so decode them before matching.
+        $decodedContent = ($content === false) ? '' : preg_replace_callback('/#([0-9a-f]{2})/i', function ($match) {
+            return chr(hexdec($match[1]));
+        }, $content);
+
+        // A complete PDF ends with startxref <offset> %%EOF; anything else is truncated or corrupt.
+        // Encrypted PDFs cannot be scanned, so /Encrypt is blocked too.
+        // /OpenAction followed by '[' is a plain page destination (zoom/fit).
+        // for every generated PDF. Any other /OpenAction value is an action and stays blocked.
+        $activeContentPattern = '/\/(JavaScript|JS|AA|Launch|SubmitForm|ImportData|GoToR|GoToE|EmbeddedFile|RichMedia|XFA|Encrypt)\b|\/OpenAction\b(?!\s*\[)/i';
+
+        $this->isUnsafePdf = false;
+        $this->imageInfo = @getimagesize($this->fileInfo['tmp_name']);
+
+        if ($this->imageInfo && ImageManager::isRealImage($this->fileInfo['tmp_name'])) {
+            $this->file_type = self::FILE_TYPE_IMAGE;
+        } elseif ($content !== false && substr($content, 0, 5) === '%PDF-' && preg_match('/startxref\s+\d+\s+%%EOF\s*$/', substr($content, -1024)) && !preg_match($activeContentPattern, $decodedContent)) {
+            $this->file_type = self::FILE_TYPE_PDF;
+        } else {
+            $this->file_type = 0;
+            $this->isUnsafePdf = ($content !== false && substr($content, 0, 5) === '%PDF-');
+        }
+    }
+
+    public function setFileName()
+    {
+        $this->file_name = $this->id.'.'.$this->getFileExtension();
+    }
+
+    /**
+     * Extension is derived from the file's real, validated content
+     * (getimagesize()/PDF signature), captured once in setFileType(),
+     * never from the uploaded filename or mime header (both are
+     * attacker-controlled).
+     */
+    public function getFileExtension()
+    {
+        if ($this->file_type == self::FILE_TYPE_PDF) {
+            return 'pdf';
+        }
+
+        return image_type_to_extension($this->imageInfo[2], false);
+    }
+
+    public function getContentType()
+    {
+        $file = $this->getPhysicalPath();
+
+        $contentType = 'application/octet-stream';
+        if (function_exists('finfo_open')) {
+            $fileInfo = @finfo_open(FILEINFO_MIME);
+            $contentType = @finfo_file($fileInfo, $file);
+            @finfo_close($fileInfo);
+        } elseif (function_exists('mime_content_type')) {
+            $contentType = @mime_content_type($file);
+        } elseif (function_exists('exec')) {
+            $contentType = trim(@exec('file -b --mime-type '.escapeshellarg($file)));
+            if (!$contentType) {
+                $contentType = trim(@exec('file --mime '.escapeshellarg($file)));
+            }
+            if (!$contentType) {
+                $contentType = trim(@exec('file -bi '.escapeshellarg($file)));
+            }
+        }
+
+        return $contentType;
+    }
+
+    public function getContentLength()
+    {
+        $file = $this->getPhysicalPath();
+
+        if (Tools::file_exists_cache($file)) {
+            return filesize($file);
+        }
+
+        return 0;
+    }
+
+    public function getPhysicalPath()
+    {
+        $this->setDocumentFolder();
+
+        return $this->documentFolder.$this->file_name;
+    }
+
+    public function getDownloadFileName()
+    {
+        $objHotelBookingDetail = new HotelBookingDetail($this->id_htl_booking);
+        $fileExtension = pathinfo($this->file_name, PATHINFO_EXTENSION);
+
+        return self::DOWNLOAD_FILE_PREFIX.$this->id_htl_booking_document.'_'.date('YmdHis').'.'.$fileExtension;
+    }
+
+    public function deleteDocumentFolder()
+    {
+        $this->setDocumentFolder();
+
+        return Tools::deleteDirectory($this->documentFolder);
+    }
+
+    public function delete()
+    {
+        $this->deleteDocumentFolder();
+
+        return parent::delete();
+    }
+}

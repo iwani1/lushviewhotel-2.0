@@ -1,0 +1,21 @@
+------------------------------
+# V1.0.1 to V1.0.2
+------------------------------
+
+## Improved/Changed Features:
+
+* [BO] : [#1809] Removed service product stats functionality tied to the removed Additional Facilities feature.
+* [BO] : [#1688] Expanded the applicable-days calculation to support all service product price calculation methods, not just per-day.
+
+------------------------------
+# V1.0.0 to V1.0.1
+------------------------------
+
+## Improved/Changed Features:
+
+* [CO] : [#1399] Added Standard product flow in QloApps
+
+Changelog
+
+v1.0.0
+- first release
