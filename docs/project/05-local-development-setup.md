@@ -29,33 +29,145 @@ against "what it does with 1,934 real bookings". Switching between them is one c
 
 ---
 
-## 2. Before you start — install Docker on Fedora
+## 2. Before you start — container tooling on Fedora
 
-Fedora ships **Podman**, not Docker. Both work with these files; Docker is the smoother path
-because of how it maps file ownership (see §10.3). To install Docker:
+**Check what you already have before installing anything.** Fedora ships several overlapping
+packages, and most of the time one small piece is missing rather than the whole stack.
+
+### 2.1 What is already installed?
 
 ```bash
-sudo dnf -y remove docker-client docker-client-latest docker-common \
-                   docker-latest docker-engine podman-docker
-sudo dnf -y install dnf-plugins-core
-sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
+echo "== docker CLI =="; command -v docker && docker --version
+echo "== compose plugin =="; docker compose version 2>&1 | head -2
+echo "== plugin dir =="; ls /usr/libexec/docker/cli-plugins/ ~/.docker/cli-plugins/ 2>/dev/null
+echo "== daemon reachable? =="; docker info >/dev/null 2>&1 && echo "yes" || echo "NO"
+echo "== podman =="; command -v podman && podman --version
+echo "== podman-compose =="; command -v podman-compose && podman-compose --version 2>&1 | head -1
+echo "== dnf version =="; dnf --version | head -1
 ```
 
-Then **log out and back in** (the group membership only takes effect in a new session) and
-verify:
+Two things decide which option below you need: whether `docker compose version` works, and
+whether the daemon is reachable. Note that **`dnf --version` matters**: Fedora 41 and later
+ship **dnf5**, whose `config-manager` syntax differs from dnf4 — see §2.3.
+
+A very common Fedora state is: a working Docker CLI from Fedora's own repositories
+(`Docker version 29.x, build N.fcNN`) with `docker-buildx` present but **no compose plugin**.
+Fedora does not package `docker-compose-plugin`, because that is a Docker CE repository
+package name. That is Option A.
+
+### 2.2 Option A — add the compose plugin to the Docker you already have (fastest)
+
+If `docker info` says `yes` but `docker compose version` fails, this is all you need:
 
 ```bash
-docker --version
+mkdir -p ~/.docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+     -o ~/.docker/cli-plugins/docker-compose
+chmod +x ~/.docker/cli-plugins/docker-compose
 docker compose version
-docker run --rm hello-world
 ```
 
-If you would rather use Podman, skip all of the above and substitute `podman` for `docker`
-and `podman compose` for `docker compose` in every command below. The compose file needs no
-changes.
+On an ARM machine substitute `docker-compose-linux-aarch64`. No root, no new repositories,
+and nothing conflicts with what is already installed.
+
+Fedora may also package a standalone Compose; worth trying first since it is one command:
+
+```bash
+sudo dnf -y install docker-compose
+docker-compose version      # note the HYPHEN - this is the standalone binary
+```
+
+If that installs the standalone binary only, use **`docker-compose`** (hyphen) instead of
+**`docker compose`** (space) in every command in this guide. They are equivalent for our
+purposes. To get the space form as well, symlink it into the plugin directory:
+
+```bash
+mkdir -p ~/.docker/cli-plugins
+ln -s "$(command -v docker-compose)" ~/.docker/cli-plugins/docker-compose
+docker compose version
+```
+
+**If `docker info` said NO**, the CLI is installed but no daemon is. Fedora's daemon package
+is `moby-engine`:
+
+```bash
+sudo dnf -y install moby-engine
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+# log out and back in, then:
+docker info >/dev/null && echo "daemon OK"
+```
+
+### 2.3 Option B — install Docker CE from Docker's own repository
+
+Only needed if you want Docker's official build rather than Fedora's. **Use the syntax that
+matches your dnf version** — this is where the instructions most often go wrong on Fedora 41+.
+
+**dnf5 (Fedora 41 and later):**
+
+```bash
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+**dnf4 (Fedora 40 and earlier):**
+
+```bash
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+```
+
+with the remaining lines identical. The old `--add-repo` flag **does not exist in dnf5** and
+fails with `Unknown argument "--add-repo" for command "config-manager"`.
+
+If Docker has not yet published packages for your Fedora release, the repository resolves
+`$releasever` to a version that does not exist and `dnf` reports
+`No match for argument: docker-ce`. Either wait, pin an older release in the repo file, or
+use Option A or C — which is usually easier than fighting the repository.
+
+Before installing Docker CE, remove anything that would own `/usr/bin/docker` first:
+
+```bash
+sudo dnf -y remove docker docker-client docker-client-latest docker-common \
+                   docker-latest docker-engine moby-engine podman-docker
+```
+
+Then **log out and back in** — the `docker` group membership only applies to new sessions.
+
+### 2.4 Option C — use Podman, which Fedora already gives you
+
+If `podman` and `podman-compose` are both present, you can skip every install step above:
+
+```bash
+podman-compose up -d --build
+```
+
+and use `podman-compose` (or `podman compose`) wherever this guide says `docker compose`.
+The compose file needs no edits.
+
+This project is built to work this way:
+
+- `dev/docker/entrypoint.sh` waits for MariaDB itself, so the compose file uses the short
+  `depends_on: [db]` form rather than `condition: service_healthy`, which `podman-compose`
+  has supported inconsistently across versions.
+- The same entrypoint detects **rootless** Podman via `/run/.containerenv` and runs Apache as
+  container root — which under rootless Podman *is* your host user — instead of chowning the
+  repository to `www-data`. Without that, `modules/` and `img/` would end up owned by a host
+  subuid such as 100032 and you would no longer be able to edit your own source files.
+  It prints the resolved Apache user on every start so you can confirm this worked; see §10.3.
+
+Missing podman-compose?
+
+```bash
+sudo dnf -y install podman podman-compose
+```
+
+**Which to choose?** Option A if you already have a working Docker daemon — it is one command
+and keeps the ownership model simple. Option C if you would rather not install anything and
+are comfortable reading the entrypoint output. Both are supported; the guide's commands are
+identical apart from the binary name.
 
 ---
 
@@ -385,65 +497,32 @@ How to read it:
   repository root, where `docker-compose.yml` lives.
 - If `rpm -q docker-compose-plugin` reports "not installed", that is the whole problem.
 
-**Fix A — install Docker CE and the compose plugin (recommended)**
+**Fixes.** All three are written out in §2, with the correct syntax per dnf version. In short:
 
-```bash
-sudo dnf -y remove docker-client docker-client-latest docker-common \
-                   docker-latest docker-engine podman-docker
-sudo dnf -y install dnf-plugins-core
-sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"
-```
+- **§2.2 Option A — add the compose plugin to the Docker you already have.** Usually the whole
+  fix, needs no root and no new repository. Fedora packages its own Docker CLI, and it ships
+  `docker-buildx` but *not* the compose plugin; Fedora does not package
+  `docker-compose-plugin` at all, because that is a Docker CE repository package name. So
+  `sudo dnf install docker-compose-plugin` will report "No match for argument" no matter how
+  correct it looks.
+- **§2.3 Option B — install Docker CE from Docker's repository.** Note that **dnf5 (Fedora 41+)
+  uses `dnf config-manager addrepo --from-repofile=URL`**. The older
+  `--add-repo` flag does not exist there and fails with
+  `Unknown argument "--add-repo" for command "config-manager"`.
+- **§2.4 Option C — use Podman**, which Fedora already provides. If `podman` and
+  `podman-compose` are both installed, there is nothing to install at all.
 
-Then **log out and back in** — the group change only applies to new sessions — and verify:
+**A note on a real diagnosis.** This exact failure was reported from a Fedora 44 machine
+showing `Docker version 29.9.2, build 2.fc44`, `/usr/libexec/docker/cli-plugins/` containing
+only `docker-buildx`, `podman-docker` *not* installed, and both `podman` and `podman-compose`
+present. That is Fedora's own Docker CLI with no compose plugin — Option A or Option C, not a
+Docker CE reinstall. The `build N.fcNN` suffix is the giveaway: Docker CE reports a git hash
+there instead.
 
-```bash
-docker compose version
-docker run --rm hello-world
-```
-
-Removing `podman-docker` matters: while it is installed, `/usr/bin/docker` keeps pointing at
-Podman and shadows the real Docker CLI.
-
-**Fix B — you already have Docker CE and only the plugin is missing**
-
-```bash
-sudo dnf -y install docker-compose-plugin
-docker compose version
-```
-
-If your repo does not carry it, install the plugin per-user instead:
-
-```bash
-mkdir -p ~/.docker/cli-plugins
-curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
-     -o ~/.docker/cli-plugins/docker-compose
-chmod +x ~/.docker/cli-plugins/docker-compose
-docker compose version
-```
-
-On an ARM machine substitute `docker-compose-linux-aarch64`.
-
-**Fix C — use Podman instead**
-
-```bash
-sudo dnf -y install podman podman-compose
-podman compose version          # or: podman-compose version
-```
-
-Then use `podman compose` in place of `docker compose` everywhere. The compose file needs no
-edits.
-
-Prefer **`podman compose`** over the older standalone **`podman-compose`** binary where both
-exist: `podman compose` delegates to a real Compose implementation. This project's compose
-file uses `depends_on: condition: service_healthy`, which `podman-compose` has supported
-inconsistently across versions — if the app container starts before MariaDB is ready and the
-installer cannot reach the database, that is the likely reason. Docker avoids the question
-entirely, which is why Fix A is the recommendation.
-
-If you stay on Podman, also read §10.3 on file ownership under rootless Podman.
+The compose file no longer depends on `depends_on: condition: service_healthy`, which older
+`podman-compose` releases handled inconsistently. `dev/docker/entrypoint.sh` now waits for
+MariaDB itself, so all three options behave the same. See §10.3 for how file ownership differs
+between them.
 
 ### 10.1 "Permission denied" reading files, or the installer says folders are not writable
 
@@ -488,10 +567,59 @@ sudo chown -R $UID:$UID .
 git config --global --add safe.directory "$PWD"
 ```
 
-With **rootless Podman** the uid mapping is different and container root maps to your own
-user, so this problem generally does not arise — one reason Podman is pleasant on Fedora.
-The trade-off is that `:z` relabelling and volume paths behave slightly differently; if you
-hit odd permission errors under Podman, try Docker before debugging further.
+With **rootless Podman** the mapping is different, and the naive fix above would be actively
+harmful:
+
+| Runtime | container uid 0 | container `www-data` (uid 33) |
+| --- | --- | --- |
+| Docker (rootful) | host root | host uid 33 |
+| Podman (rootless) | **your host user** | a host **subuid**, e.g. 100032 |
+
+So under rootless Podman, chowning `modules/` or `img/` to `www-data` would transfer those
+tracked source files on your host to an unmapped subuid — you would no longer be able to edit
+your own code, and git would complain.
+
+`dev/docker/entrypoint.sh` handles this. It detects rootless Podman by reading
+`/run/.containerenv` (a file Podman creates and Docker does not) and checking for `rootless=1`.
+When it matches, the entrypoint runs Apache as **container root — which is your host user —**
+and skips the chown entirely, so files written by the app land on your host already owned by
+you. Under Docker it keeps the conventional `www-data` + chown behaviour.
+
+For this to work the image patches Debian's `/etc/apache2/envvars`, which otherwise hardcodes
+`export APACHE_RUN_USER=www-data` and would silently override anything we export. The
+`Dockerfile` rewrites it to `${APACHE_RUN_USER:-www-data}` and prints the result during the
+build.
+
+**Verify it on first start.** The entrypoint reports what it decided:
+
+```bash
+docker compose logs app | grep qlo-entrypoint
+```
+
+Look for these lines:
+
+```
+[qlo-entrypoint] rootless Podman detected - requesting Apache run as
+[qlo-entrypoint] /etc/apache2/envvars resolves APACHE_RUN_USER to: #0
+```
+
+`#0` means the override took effect. If it says `www-data` while you are on rootless Podman,
+the envvars patch did not apply — the entrypoint prints a WARNING saying so, and repository
+files may end up owned by a subuid. Either switch to Docker, or reclaim ownership afterwards:
+
+```bash
+sudo chown -R $UID:$UID .
+git config --global --add safe.directory "$PWD"
+```
+
+To see the host-side mapping for yourself:
+
+```bash
+podman unshare cat /proc/self/uid_map
+```
+
+Finally, SELinux `:z` relabelling behaves the same under both runtimes, and both bind mounts in
+`docker-compose.yml` carry it.
 
 ### 10.4 Port 8080 or 3307 already in use
 
@@ -552,7 +680,7 @@ These come from §9 of the project brief and are not negotiable:
 | `docker-compose.yml` | MariaDB 11.4 + PHP 8.4/Apache, SELinux-labelled mounts, loopback-only ports |
 | `dev/docker/Dockerfile` | builds the required PHP extensions, enables `mod_rewrite`, sets `AllowOverride All` |
 | `dev/docker/php.ini` | exceeds every installer minimum; timezone `Africa/Accra`; opcache revalidating |
-| `dev/docker/entrypoint.sh` | fixes ownership on the twelve directories the installer requires to be writable |
+| `dev/docker/entrypoint.sh` | waits for MariaDB to accept connections, detects rootless Podman and runs Apache as your host user when it does (otherwise fixes ownership on the twelve directories the installer requires to be writable), and reports the resolved Apache user on every start |
 | `dev/docker/initdb/README.md` | optional first-run SQL drop point (left empty) |
 | `dev/scripts/use-db.sh` | switch between `qloapps_fresh` and `qloapps_live`, clearing caches |
 | `dev/scripts/import-live-dump.sh` | validated, production-incapable import of the live dump |

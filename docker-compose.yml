@@ -46,9 +46,16 @@ services:
       dockerfile: dev/docker/Dockerfile
     container_name: qlo-app
     restart: unless-stopped
+    # Short form on purpose. The long form
+    #   depends_on: { db: { condition: service_healthy } }
+    # is the correct Docker idiom, but podman-compose has supported the
+    # "condition" key inconsistently across versions and silently ignores it in
+    # some. Instead dev/docker/entrypoint.sh waits for MariaDB to accept TCP
+    # connections before starting Apache, which works identically under Docker,
+    # Podman and podman-compose. The healthcheck on the db service is kept
+    # because `docker compose ps` reporting "healthy" is still useful.
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     ports:
       - "127.0.0.1:8080:80"
     volumes:
