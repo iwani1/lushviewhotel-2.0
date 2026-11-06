@@ -35,7 +35,21 @@ repository is **QloApps 1.8.0**, released 2026-11-06 08:53 UTC, and GitHub repor
 import is the stable release, not a moving dev branch. The repository name
 `lushviewhotel-2.0` is therefore literally the 1.7.0 → 1.8.0 migration.
 
-Two findings dominate everything else.
+Three findings dominate everything else.
+
+**0. A production database export was committed to this public repository.** During this
+engagement a ~15 MB dump of the live hotel database — 300 tables including 1,257 customer
+records, 22,725 guest rows, 1,934 orders, 2,350 booking details and 15 active back-office
+employee accounts — was pushed to this branch in a repository whose visibility is **public**.
+It has been **purged from branch history and `.gitignore` now blocks a repeat**, but the
+exposure window cannot be undone by git alone. Employee and customer passwords must be
+rotated, GitHub Support asked to purge the dangling object, and breach-notification duties
+under Ghana's Data Protection Act 2012 (Act 843) assessed. Two facts limit the damage: **no
+card data** (the `card_number`, `card_holder`, `card_expiration` and `card_brand` columns are
+empty in all 2,058 payment rows) and **no API keys or cookie salt** leaked, so the password
+hashes — MD5-era but salted with the install's `_COOKIE_KEY_`, which was not included — are
+not trivially crackable. Full detail and the outstanding checklist in **§4.4**; this is P0
+item 7 in §9.
 
 **1. The live production site is exposed.** Every recent QloApps security fix is **absent
 from the v1.7.0 tag** that production runs — verified by commit ancestry, all four fix
@@ -66,8 +80,12 @@ version numbers.
 
 1. **Choose the migration path** — in-place 1-Click Upgrade from the live 1.7.0 back office,
    or a fresh 1.8.0 install plus data migration. Do **not** file-copy (§2.9).
-2. **Confirm the host PHP version.** 1.8.0 needs PHP ≥8.2; the live manifest still declares
-   `>=5.4 <8.0`. If the host is below 8.2, nothing else can proceed (§2.7).
+2. ~~**Confirm the host PHP version**~~ — **RESOLVED.** The live manifest declares
+   `>=5.4 <8.0`, but that file is stale: the production database records the host runtime as
+   **PHP 8.4.27** on **MariaDB 11.4.13**, inside 1.8.0's supported `>=8.2 <8.6` range. **No
+   PHP upgrade is needed**, which removes what looked like the biggest schedule risk (§2.1,
+   §2.7). The same export confirms `QLO_VERSION_DB` = `1.7.0.0`, so the target version is no
+   longer inferred from a CHANGELOG fingerprint but read from the database itself.
 3. **Account for the `install/` → `install-dev/` and `admin/` → `admin-dev/` directory
    rename** in any deploy script, `.htaccess` rule or cron entry (§2.9).
 4. **Ghana localisation** — now added to this branch as `localization/gh.xml` (GHS + Act 1151
@@ -118,6 +136,27 @@ v1.5.2–v1.7.0 (`webkul/qloapps`, `php >=5.4 <8.0`, `minimum-stability: dev`). 
 (`qloapps/qloapps`, `php >=8.2 <8.6`, `stable`). So composer.json bounds the live site at
 "≤1.7.0" and the CHANGELOG pins it to exactly 1.7.0.
 
+**Version — now confirmed directly from the database, not inferred.** A production database
+export taken from the live server during this audit carries the version rows QloApps writes
+itself (added by CHANGELOG #1481, *"Added current installed QloApps version to the DB on
+install"*):
+
+| Configuration key | Value | Meaning |
+|---|---|---|
+| `PS_VERSION_DB` | `1.6.1.23` | Underlying PrestaShop schema version |
+| `QLO_VERSION_DB` | `1.7.0.0` | **Installed QloApps version — the live site is 1.7.0** |
+
+Both values match `install-dev/install_version.php` in the v1.7.0 tree exactly
+(`_PS_INSTALL_VERSION_` = 1.6.1.23). This removes the last doubt from the CHANGELOG
+fingerprint: **the upgrade is 1.7.0 → 1.8.0**, and this repo is the 1.8.0 side of it.
+
+The same export also records the host runtime, which closes the PHP question in §2.7:
+
+- **PHP 8.4.27** — inside 1.8.0's supported `>=8.2 <8.6` range.
+- **MariaDB 11.4.13**, exported via phpMyAdmin 5.2.3.
+- Table prefix **`qlo_`** (not the PrestaShop default `ps_`) — relevant to any migration
+  script written against this database.
+
 ### 2.2 URGENT — the live site is missing every recent security fix
 
 I verified by commit ancestry that **all four upstream fix commits are absent from the
@@ -135,10 +174,19 @@ the module carrying **CVE-2025-67325 — unauthenticated unrestricted file uploa
 remote code execution**, scoped to versions ≤1.7.0. §4.1 documents that our 1.8.0 tree
 patches it with a strict `jpg/png/jpeg` allowlist and `ImageManager::resize()` re-encoding.
 
+**The module is enabled on the live site.** The production database export lists
+`qlohotelreview` with `active=1` in `qlo_module` (§2.1). So the unpatched upload path is not
+merely present in the release the hotel runs — it is switched on. The review table
+`qlo_qhr_hotel_review` also exists in that schema, confirming the module has been installed
+and used. **This is the single highest-priority item in this audit** and it is a back-office
+toggle, not a code change (§9, P0 item 2).
+
 > **Honest scoping of this finding.** I confirmed (a) the fixes are absent from the v1.7.0
-> tag and (b) the CVEs are published as affecting ≤1.7.0. I have **not** confirmed which
-> modules are *enabled* on the live instance, nor whether the operator back-ported a hotfix.
-> Treat this as **high-priority verify-and-remediate**, not as confirmed-exploitable.
+> tag, (b) the CVEs are published as affecting ≤1.7.0, and (c) `qlohotelreview` is
+> `active=1` in the live database. What I have **not** confirmed is whether the operator
+> back-ported a hotfix to the module's files on disk — the database records the enabled flag
+> and version string, not the code. Treat this as **confirmed-exposed, verify-then-remediate**:
+> disable the module now regardless, since the toggle costs nothing and is reversible.
 
 **If the upgrade cannot happen immediately**, apply these stop-gaps in order:
 
@@ -210,24 +258,30 @@ The 123 Google reviews are a real asset — worth wiring the `qlohotelreview` mo
 2. A third-party listing places a "Lush View Hotel" in **Ashaiman** (H417, Nii Teeth Kple
    Street, `GB-033-4416`, 25 bedrooms) — a different address from Tema. Same property, second
    property, or an unrelated hotel sharing the name?
-3. **Room inventory could not be enumerated** from the public site (`/rooms` 404s; the
-   listing slug differs). Room types, rates, availability and existing bookings need
-   back-office or database access.
+3. ~~**Room inventory could not be enumerated**~~ — **ANSWERED** from the production database
+   export: **8 room types**, **38 individual rooms**, **56 enabled modules**, 459
+   configuration rows. Still to confirm with the client: whether all 38 rooms are sellable
+   and whether the room-type set matches what the public site advertises (§2.5 notes the
+   homepage triplicates three room blocks).
 4. **In-place upgrade or fresh build?** Running QloApps' own 1.7.0→1.8.0 upgrade path against
    the live database preserves bookings and customer history. A fresh 1.8.0 install needs an
    explicit export/import plan. These are very different projects with very different risk.
 
 ### 2.7 Migration prerequisites and risks
 
-- **PHP version is the schedule risk.** 1.8.0 requires **PHP >=8.2 <8.6**. The live
-  `composer.json` still declares `>=5.4 <8.0`, though the 1.7.0 changelog claims PHP 8.1–8.4
-  support was added — so the manifest is stale and the host's *actual* PHP version must be
-  confirmed directly. **If the host runs PHP 8.1 or below, it must be upgraded before 1.8.0
-  can boot at all.** Verify this first; it is the most likely thing to derail the timeline.
+- **PHP version — RESOLVED, no longer a schedule risk.** 1.8.0 requires **PHP >=8.2 <8.6**.
+  The live `composer.json` still declares `>=5.4 <8.0`, but that manifest is stale; the
+  production database export records the host's actual runtime as **PHP 8.4.27** (§2.1),
+  which sits inside the supported range. **No PHP upgrade is needed before 1.8.0 can boot.**
+  What still needs checking is the *other* extensions 1.8.0 requires (`intl`, `gd`,
+  `openssl`, `mbstring`, `zip`, `curl`) — see §5, where `ext-mcrypt` is deliberately **not**
+  among them.
 - **Channel manager is a breaking swap.** v1.8.0 removed the default
   `qlochannelmanagerconnector` and replaced it with the combined `qlocmconnector`
-  (CHANGELOG #1952). If the client uses a channel manager, this needs configuration and data
-  migration, not just a file copy.
+  (CHANGELOG #1952). **This now applies: the production database shows
+  `qlochannelmanagerconnector` is installed and `active=1` on the live site**, so the swap
+  needs configuration and data migration, not just a file copy. Confirm with the client which
+  channel manager / OTA connections are actually in use before the upgrade.
 - **Module count moved 57 → 61 bundled.** Removed: `qloautoupgrade`, `qlochannelmanagerconnector`. Added: `qlocmconnector`, `qlocrontaskmanager`, `qloduitkupayment`, `qlogooglehotelconnector`, `qlohotelreports`, `qlositemap`. Diff the *enabled* module list in the live database before and after, not just the bundled set.
 - **Back up the database and all uploaded media** (`img/`, `modules/*/views/img/`,
   `upload/`, `download/`) before any upgrade attempt. The gallery and testimonial images
@@ -388,6 +442,94 @@ hygiene (§4.3), not patching.
 - [ ] Least-privilege the MySQL user — drop `FILE`, `DROP`, and cross-database rights. This
       is also the documented mitigation for the `bo_query` SQLi class.
 - [ ] Put a WAF rule on `bo_query` for SQL metacharacters as belt-and-braces.
+
+---
+
+### 4.4 Incident — a production database export was committed to this public repository
+
+**What happened.** During this engagement a full production database export from the live
+hotel server (~15 MB, 300 tables, `qlo_` prefix) was committed to branch
+`arena/07df51c3-lushviewhotel-2-0` via the GitHub web UI. The repository
+`iwani1/lushviewhotel-2.0` is **public** (`isPrivate=false`), so the file was retrievable by
+anyone from the moment it was pushed. It was never merged to `main`.
+
+**What was in it.** Personal and operational data, not just schema:
+
+| Table | Rows | Sensitive content |
+|---|---|---|
+| `qlo_guest` | 22,725 | Guest records |
+| `qlo_connections` | 20,992 | Session/connection logs |
+| `qlo_mail` | 11,021 | Queued mail |
+| `qlo_htl_booking_detail` | 2,350 | City, phone, email per booking |
+| `qlo_order_detail` | 2,104 | Order line items |
+| `qlo_orders` | 1,934 | Order headers |
+| `qlo_customer` | 1,257 | First/last name, email, birthday, phone |
+| `qlo_customer_message` / `_thread` | 58 / 55 | Guest correspondence |
+| `qlo_address` | 22 | Includes `dni`, `vat_number`, `phone_mobile` |
+| `qlo_employee` | 15 | **All `active=1`** — back-office accounts |
+
+**Two things that materially limit the damage:**
+
+1. **No payment card data.** `qlo_order_payment` (2,058 rows) has `card_number`,
+   `card_holder`, `card_expiration` and `card_brand` columns, and **all four are empty in
+   every row** — the hotel does not store card data, which is consistent with the payment mix
+   being overwhelmingly cash and mobile money. So this is **not** a PCI-DSS cardholder-data
+   incident.
+2. **No API keys and no cookie salt.** `qlo_webservice_account` and `qlo_webservice_permission`
+   exist but contain **zero rows**, and the `_COOKIE_KEY_` / `_COOKIE_IV_` values appear
+   **nowhere** in the export (they live in `config/settings.inc.php`, which was not included).
+
+**The password hashes are weak but not trivially crackable.** All 1,257 `qlo_customer.passwd`
+values and 14 of 15 `qlo_employee.passwd` values are 32-character hex — the MD5-era format.
+QloApps computes these as `md5(_COOKIE_KEY_ . $password)`, so they are salted with a
+per-install secret that did **not** leak. They are therefore not bare MD5 and cannot be
+looked up in a rainbow table. They are still MD5, still fast to brute-force if the salt is
+ever recovered, and must be treated as compromised.
+
+**Remediation — repository (done on this branch):**
+
+- [x] The export commit was **removed from branch history** and the branch force-pushed, so
+      the file is no longer in the branch tree or in PR #1.
+- [x] `.gitignore` now excludes `*.sql` (plus `*.sql.gz`, `*.sql.bz2`, `*.sql.zip`,
+      `*.sqlite`, `*.sqlite3`, `*.db`) with negations preserving the schema and upgrade SQL
+      that QloApps itself ships under `install-dev/`. A future `git add -A` cannot repeat
+      this. Verified against untracked probe files: a dump at the repo root is ignored,
+      `install-dev/data/` and `install-dev/upgrade/sql/` are not, and no already-tracked file
+      is affected.
+
+**Remediation — still required, and outside what git can fix:**
+
+- [ ] **The blob is not gone from GitHub.** Rewriting history makes the commit unreachable
+      from the branch, but GitHub keeps unreachable objects until it garbage-collects, and
+      anyone who fetched, forked, cloned, or cached the commit in the ~20 minutes it was
+      public may still hold a copy. **Contact GitHub Support to request removal of the cached
+      views and a purge of the dangling commit**, and treat the data as disclosed.
+- [ ] **Consider making the repository private.** The client chose to keep it public for now;
+      that is a defensible choice for the code, but it means any future accidental commit of
+      operational data is instantly public. If the repo does not need to be public, private is
+      the safer default.
+- [ ] **Rotate all 15 back-office employee passwords immediately.** All 15 accounts are
+      `active=1`. This is the highest-value credential set in the export — it grants access to
+      guest PII and the ability to alter bookings.
+- [ ] **Force a password reset for the 1,257 customer accounts.**
+- [ ] **Assess breach-notification obligations.** Ghana's **Data Protection Act, 2012
+      (Act 843)** requires a data controller to notify the Data Protection Commission and
+      affected individuals of a security compromise of personal data. The customer base
+      includes corporate and international domains, so **GDPR** may also apply if any data
+      subjects are in the EU/EEA — in which case the 72-hour supervisory-authority clock
+      starts from awareness. **This is a legal question for the client and their counsel, not
+      an engineering one**; flag it now rather than after the upgrade.
+- [ ] **Check access logs** for the repository and for any GitHub traffic API signals
+      available to the client, to gauge whether the file was actually retrieved.
+
+**Facts worth keeping from the export.** Before it was purged, the following was extracted and
+is recorded elsewhere in this audit, because it is operationally useful and contains no
+personal data: the host runs **PHP 8.4.27** and **MariaDB 11.4.13** (§2.1, §2.7); the
+installed versions are **`PS_VERSION_DB` 1.6.1.23 / `QLO_VERSION_DB` 1.7.0.0** (§2.1); the
+inventory is **8 room types / 38 rooms / 56 enabled modules** (§2.6); and
+**`qlohotelreview` is `active=1`** (§2.2). The payment mix recorded in `qlo_order_payment`
+is dominated by **cash and mobile money**, with card fields empty — relevant context if the
+deferred payment-gateway work (§2.8) is ever reinstated.
 
 ---
 
@@ -618,62 +760,74 @@ Items marked **DONE** are already committed on this branch.
    Also `README.md`, `AGENTS.md`, `LICENSE.md`. Five-minute change; stops version disclosure.
 4. **Add a WAF rule on `bo_query`** and drop `FILE`/`DROP`/cross-database rights from the
    MySQL user (§2.2) — mitigates CVE-2026-75497/75498 until the upgrade lands.
-5. **Confirm the host PHP version.** 1.8.0 requires **≥8.2**; the live manifest declares
-   `>=5.4 <8.0` (§2.7). If the host is below 8.2, upgrade PHP first — this gates everything.
+5. ~~**Confirm the host PHP version.**~~ **RESOLVED** — the production database records the
+   host as **PHP 8.4.27** on **MariaDB 11.4.13**, inside 1.8.0's supported `>=8.2 <8.6` range
+   (§2.1, §2.7). The stale live manifest (`>=5.4 <8.0`) was the only thing suggesting
+   otherwise, so **no PHP upgrade is required before 1.8.0 can boot**. What remains is
+   confirming the other required extensions (`intl`, `gd`, `openssl`, `mbstring`, `zip`,
+   `curl`) — note that `ext-mcrypt` is deliberately **not** among them (§5).
 6. **Back up the live database and all uploaded media** (`img/`, `modules/*/views/img/`,
    `upload/`, `download/`) before touching anything (§2.7). Media under module paths can be
    overwritten by an upgrade.
+7. **Treat the database export committed to this branch as disclosed** (§4.4). The file has
+   been purged from branch history and `.gitignore` now blocks a repeat, but that does not
+   undo the exposure window. Remaining actions: ask GitHub Support to purge the dangling
+   object, **rotate all 15 back-office employee passwords** (all `active=1`), force a reset
+   for the 1,257 customer accounts, and get a legal read on breach notification under
+   Ghana's Data Protection Act 2012 (Act 843) — plus GDPR if any EU data subjects are
+   involved. No card data leaked (card columns are empty) and no API keys or cookie salt
+   leaked, which limits the blast radius.
 
 ### P1 — the upgrade itself
 
-7. **Choose the migration path** (§2.9). Either (A) run the QloApps **1-Click Upgrade addon**
+8. **Choose the migration path** (§2.9). Either (A) run the QloApps **1-Click Upgrade addon**
    from the *existing* 1.7.0 back office — the only supported vehicle, and not vendored in
    this repo — or (B) fresh 1.8.0 install plus export/import of hotels, room types, customers
    and bookings. Blocking decision; everything below depends on it.
-8. **Account for the directory rename** `install/` → `install-dev/` and `admin/` →
+9. **Account for the directory rename** `install/` → `install-dev/` and `admin/` →
    `admin-dev/` between 1.7.0 and 1.8.0 (§2.9). Update deploy scripts, `.htaccess` rules,
    cron entries and any hardcoded `_PS_ADMIN_DIR_` paths.
-9. **Plan the module delta, 57 → 61 bundled** (§2.9). Removed: `qloautoupgrade`,
+10. **Plan the module delta, 57 → 61 bundled** (§2.9). Removed: `qloautoupgrade`,
    `qlochannelmanagerconnector`. Added: `qlocmconnector`, `qlocrontaskmanager`,
    `qloduitkupayment`, `qlogooglehotelconnector`, `qlohotelreports`, `qlositemap`. The
    channel-manager swap is breaking and needs config/data migration if in use (§2.7).
-10. **DONE — remove `ext-mcrypt` from `composer.json`** (§5). Committed `f1f0749`; unblocks
+11. **DONE — remove `ext-mcrypt` from `composer.json`** (§5). Committed `f1f0749`; unblocks
     `composer install` on any supported PHP.
-11. **DONE — create GHS currency and `localization/gh.xml`** (§6.2). Committed `c25596c` with
+12. **DONE — create GHS currency and `localization/gh.xml`** (§6.2). Committed `c25596c` with
     Act 1151 tax rules (VAT 15% + NHIL 2.5% + GETFund 2.5% = 20%, `behavior="1"` combine, not
     compound). **Rates still need sign-off from the client's accountant.**
-12. **Decide `need_zip_code` only** — leave `zip_code_format` empty (§6.2, corrected
+13. **Decide `need_zip_code` only** — leave `zip_code_format` empty (§6.2, corrected
     analysis). The earlier claim that an empty format rejects guests was wrong:
     `Country::checkZipCode()` returns `true` when the format is empty, and
     `Validate::isPostCode()` already accepts GhanaPostGPS codes like `GA-183-6412`. The real
     issue is that `need_zip_code="1"` makes the field **mandatory**, which is a conversion
     risk. Also note `Tools::generateRandomZipcode()` fabricates five random digits for Ghana
     in hotel and channel-manager records.
-13. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
-14. **Configure the tourism-tax system** for Ghana's 1% GTA Tourism Development Levy via
+14. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
+15. **Configure the tourism-tax system** for Ghana's 1% GTA Tourism Development Levy via
     `QLO_USE_TOURISM_TAX` + `TaxConfiguration` — new in 1.8.0 (#1760). Prefer this over the
     flat-rate group in `gh.xml` (§6.1, §6.3). Note these tables are among those missing from
     a 1.7.0 database (§2.9).
 
 ### P2 — launch hardening and content
 
-15. Rename `admin-dev/`; delete `install-dev/`; verify the generated root `.htaccess` (§4.3).
-16. Swap the **6 logo assets** and edit the **2 guest-facing template lines** (§7).
-17. Fix the live-site content defects (§2.5): page-title typo `Lush VIew`, `Dummy Image 1–12`
+16. Rename `admin-dev/`; delete `install-dev/`; verify the generated root `.htaccess` (§4.3).
+17. Swap the **6 logo assets** and edit the **2 guest-facing template lines** (§7).
+18. Fix the live-site content defects (§2.5): page-title typo `Lush VIew`, `Dummy Image 1–12`
     alt text, duplicated Luxurious Rooms / Restaurants / Swimming Pool blocks, truncated copy,
     domain name inside the address field, `2010` copyright start.
-18. Resolve the **`.com` vs `.net` domain question** and the Tema/Ashaiman address conflict
+19. Resolve the **`.com` vs `.net` domain question** and the Tema/Ashaiman address conflict
     (§2.6) — canonical data must be settled before content is migrated.
-19. Inventory room types, rates, availability and existing bookings from the back office or
+20. Inventory room types, rates, availability and existing bookings from the back office or
     database; the public site does not expose them (§2.6).
 
 ### P3 — durability
 
-20. **DONE — add `|escape` to `search_form.tpl:85`** for defence in depth (§4.2). Committed `3587135`; removes the single-point-of-failure dependency on `AdminController.php:2267` pre-sanitising the value.
-21. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§8).
-22. Write tests around the booking and payment flows before customising (§8).
-23. Decide the Ghana regions question (`contains_states` flag + `state.xml` rows) (§6.2).
-24. Legal read on OSL-3.0 obligations, especially the attribution footer (§3, §7).
+21. **DONE — add `|escape` to `search_form.tpl:85`** for defence in depth (§4.2). Committed `3587135`; removes the single-point-of-failure dependency on `AdminController.php:2267` pre-sanitising the value.
+22. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§8).
+23. Write tests around the booking and payment flows before customising (§8).
+24. Decide the Ghana regions question (`contains_states` flag + `state.xml` rows) (§6.2).
+25. Legal read on OSL-3.0 obligations, especially the attribution footer (§3, §7).
 
 ### Deferred — payment gateway (reinstated on request)
 
