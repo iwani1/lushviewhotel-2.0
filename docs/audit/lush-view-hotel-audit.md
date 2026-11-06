@@ -1,38 +1,232 @@
 # Lush View Hotel — QloApps Application Audit
 
 **Repository:** `iwani1/lushviewhotel-2.0`
-**Audited tree:** QloApps `develop` snapshot @ `e502b63f`, imported 2026-11-06
+**Audited tree:** QloApps **1.8.0** — `develop` snapshot @ `e502b63f`, imported 2026-11-06;
+verified byte-identical to the stable `v1.8.0` tag
+**Client production site:** `lushviewhotel.net` — QloApps **1.7.0** (see §2)
 **Audit date:** 2026-11-06
-**Method:** static code + configuration analysis. No PHP runtime is available in the audit
-sandbox, so the installer was **not** booted and no dynamic/lint pass was run. Findings
-below are from source inspection, dependency metadata, and upstream CVE correlation.
+
+**Method and scope.** Two parts:
+
+1. **Static analysis of the imported tree** — source inspection, dependency metadata, and
+   correlation against published QloApps CVEs. Where a CVE was relevant I read the patched
+   code directly rather than trusting version numbers, because two upstream fixes were
+   squash-merged and therefore invisible to commit-ancestry checks.
+2. **Read-only reconnaissance of the live production site** — fetching publicly served pages
+   and files to fingerprint the running version and check deployment hygiene. Version
+   detection used CHANGELOG blob fingerprinting cross-checked against `composer.json`
+   (§2.1). Probe paths were existence checks only; **no exploit was attempted and no
+   authenticated area was touched.**
+
+**Limitations.** No PHP runtime exists in the audit sandbox, so the installer was **not**
+booted and no dynamic or lint pass was run — nothing here is verified by execution. Live-site
+findings are limited to what is publicly served; I could not enumerate room inventory,
+confirm which modules are enabled, or read the host's actual PHP version. Those are flagged
+as open questions in §2.6.
 
 ---
 
 ## 1. Executive summary
 
-The imported tree is **healthy, current, and patched**. It is not a moving development
-branch: GitHub reports `v1.8.0...develop` as `identical` (0 commits ahead, 0 behind, 0 files
-changed), so this snapshot *is* the stable **QloApps 1.8.0** release, published 2026-11-06
-08:53 UTC — the same day as the import. Every QloApps CVE published in the last 12 months
-that I could locate is fixed in this tree, including the RCE-class file-upload flaw.
+**This is an upgrade project, not a greenfield install.** The client's production site,
+`lushviewhotel.net`, is **already running QloApps — version 1.7.0** (§2). The tree in this
+repository is **QloApps 1.8.0**, released 2026-11-06 08:53 UTC, and GitHub reports
+`v1.8.0...develop` as `identical` (0 commits ahead, 0 behind, 0 files changed) — so the
+import is the stable release, not a moving dev branch. The repository name
+`lushviewhotel-2.0` is therefore literally the 1.7.0 → 1.8.0 migration.
 
-The work required for Lush View Hotel is therefore **not remediation, it is localisation**.
-Three things stand between this codebase and a production Ghanaian hotel booking engine:
+**The most urgent finding is security, and it is on the live site, not in this repo.**
+Every recent QloApps security fix is **absent from the v1.7.0 tag** that production runs —
+verified by commit ancestry, all four fix commits return `behind`. That includes
+**CVE-2025-67325, an unauthenticated unrestricted file upload leading to remote code
+execution**, and `qlohotelreview` (the module carrying it) ships in 1.7.0. All of these are
+patched in the 1.8.0 tree held here. Compounding it, `CHANGELOG.txt` and `composer.json` are
+publicly readable on the live site, which hands an attacker the exact version in one request.
 
-1. **No mobile-money payment path.** Zero African gateways are bundled. For a hotel in
-   Accra this is the single largest functional gap — guests will predominantly pay by
-   MTN MoMo / Telecel Cash / AT Money.
-2. **No Ghana localisation pack, and no GHS currency anywhere in the codebase.**
-   The country row exists; the currency, region data, and tax wiring do not.
-3. **One hard install blocker:** `composer.json` requires `ext-mcrypt`, an extension
-   removed from PHP core in 7.2 and absent on every PHP version this release supports.
+The imported 1.8.0 tree itself is clean. Every QloApps CVE published in the last 12 months
+that I could locate is fixed in it, verified by reading the patched code rather than trusting
+version numbers.
 
-Branding is far cheaper than the raw string count suggests (see §6) — **do not** bulk-rename.
+**The remaining work is localisation and content**, in rough order of effort:
+
+1. **Confirm the host PHP version.** 1.8.0 needs PHP ≥8.2; the live manifest still declares
+   `>=5.4 <8.0`. If the host is below 8.2, nothing else can proceed (§2.7).
+2. **Decide in-place upgrade vs. fresh build** — different projects, different risk (§2.6).
+3. **No Ghana localisation pack, and no GHS currency anywhere in the codebase.** The country
+   row exists; the currency, region data and postal-code policy do not (§6).
+4. **One hard install blocker:** `composer.json` requires `ext-mcrypt`, removed from PHP core
+   in 7.2 and absent on every PHP version this release supports (§5).
+5. **Content defects on the live site** — a typo in the page title, `Dummy Image 1–12` alt
+   text across the gallery, and duplicated placeholder blocks. Cheap, high-visibility (§2.5).
+6. **Payment gateway — DEFERRED** at the client's direction. The gap is real and documented
+   (§6.2) but is off the critical path for the upgrade (§2.8).
+
+Branding is far cheaper than the raw string count suggests (see §7) — **do not** bulk-rename.
 
 ---
 
-## 2. Identity and provenance
+## 2. Live site: lushviewhotel.net
+
+The client's production site is **already a QloApps installation, running version 1.7.0**.
+This reframes the project: `lushviewhotel-2.0` is a **1.7.0 → 1.8.0 upgrade**, and the tree
+in this repository is precisely the release that fixes what the live site is missing.
+
+### 2.1 Platform and version confirmation
+
+**Platform — confirmed QloApps.** Live asset paths map exactly onto modules and the theme in
+our tree:
+
+- `lushviewhotel.net/modules/wkabouthotelblock/views/img/hotel_interior/*.jpg` → present in
+  our tree at the same path (`wkabouthotelblock` 1.2.1)
+- `lushviewhotel.net/modules/wktestimonialblock/views/img/hotels_testimonials_img/*.jpg` →
+  `wktestimonialblock` 1.1.9
+- `lushviewhotel.net/themes/hotel-reservation-theme/img/404.png` → same theme as ours
+
+**Version — 1.7.0, established by CHANGELOG blob fingerprinting.** `CHANGELOG.txt` is
+publicly readable on the live site; its top entry is `V1.7.0` and it contains the 1.7.0
+release notes (e.g. `#1464: Upgrade for PHP version 8.1 to 8.4`). Each upstream release has
+a distinct CHANGELOG blob, and no `V1.8.0` entry is present:
+
+| Tag | CHANGELOG blob | Bytes | Top entry |
+|---|---|---|---|
+| v1.5.2 | `fae99866` | 42,119 | 1.5.2 |
+| v1.6.0 | `87434941` | 63,243 | 1.6.0 |
+| v1.6.1 | `927014a0` | 101,563 | 1.6.1 |
+| **v1.7.0** | `9e5053a6` | 114,514 | **1.7.0 ← live site** |
+| v1.8.0 | `41505844` | 139,170 | 1.8.0 ← this repo |
+
+Corroborating signal: the live `composer.json` matches the *single identical blob* shared by
+v1.5.2–v1.7.0 (`webkul/qloapps`, `php >=5.4 <8.0`, `minimum-stability: dev`). Note that file
+**cannot discriminate** between those three releases — only v1.8.0 changed it
+(`qloapps/qloapps`, `php >=8.2 <8.6`, `stable`). So composer.json bounds the live site at
+"≤1.7.0" and the CHANGELOG pins it to exactly 1.7.0.
+
+### 2.2 URGENT — the live site is missing every recent security fix
+
+I verified by commit ancestry that **all four upstream fix commits are absent from the
+v1.7.0 tag** (compare status `behind`, `ahead_by=0` for each):
+
+| Fix commit | CVEs | Class | In v1.7.0 (live)? |
+|---|---|---|---|
+| `123c97c` | CVE-2026-75497, CVE-2026-75498 | SQL injection via `bo_query` | **No** |
+| `153ec1c` | CVE-2026-89268 | Reflected XSS, list filter params | **No** |
+| `1d06fd3` | CVE-2026-103587 | Reflected XSS, Book Now search | **No** |
+| `7ed467d` | CVE-2026-103588, CVE-2026-103589 | Reflected XSS, module transplant + room type editor | **No** |
+
+Most seriously, **`qlohotelreview` is bundled in v1.7.0** (59 modules in that tag). That is
+the module carrying **CVE-2025-67325 — unauthenticated unrestricted file upload leading to
+remote code execution**, scoped to versions ≤1.7.0. §4.1 documents that our 1.8.0 tree
+patches it with a strict `jpg/png/jpeg` allowlist and `ImageManager::resize()` re-encoding.
+
+> **Honest scoping of this finding.** I confirmed (a) the fixes are absent from the v1.7.0
+> tag and (b) the CVEs are published as affecting ≤1.7.0. I have **not** confirmed which
+> modules are *enabled* on the live instance, nor whether the operator back-ported a hotfix.
+> Treat this as **high-priority verify-and-remediate**, not as confirmed-exploitable.
+
+**If the upgrade cannot happen immediately**, apply these stop-gaps in order:
+
+1. **Disable the `qlohotelreview` module** in the back office — removes the RCE-class upload
+   path outright. Re-enable after the upgrade.
+2. **Block public access** to `CHANGELOG.txt`, `composer.json`, `README.md`, `AGENTS.md`,
+   `LICENSE.md` (see §2.3).
+3. Add a WAF rule on `bo_query` rejecting SQL metacharacters.
+4. Drop `FILE`, `DROP` and cross-database rights from the MySQL user.
+
+### 2.3 Live-site deployment hygiene
+
+Mostly good, with two information-disclosure gaps:
+
+| Path probed | Result | Verdict |
+|---|---|---|
+| `/install-dev/` | QloApps 404 page | ✅ Installer correctly removed |
+| `/admin-dev/` | QloApps 404 page | ✅ Back office not on the default path |
+| `/sitemap.xml` | 404 | ✅ Not exposed |
+| `/CHANGELOG.txt` | **Full release notes served** | ❌ Discloses exact version |
+| `/composer.json` | **Full manifest served** | ❌ Discloses stack + PHP range |
+
+Version disclosure is what converts a public CVE list into a targeted attack: an attacker
+reading `/CHANGELOG.txt` learns "1.7.0" in one request and immediately knows which published
+exploits apply. Blocking those two files is a five-minute `.htaccess`/nginx change and should
+be done regardless of upgrade timing.
+
+### 2.4 Content inventory for migration
+
+| Field | Value on live site |
+|---|---|
+| Hotel name | Lush View Hotel |
+| Address (contact page, "Main Branch") | `lushviewhotel.net, H71 Afariwa Rd, Tema, Tema, Ghana` |
+| Phone | `030 298 5459` (intl. `+233 30 298 5459`) |
+| Email | `info@lushviewhotel.net` |
+| Footer | `© 2010-2026 Lush View Hotel. All rights reserved.` |
+| Amenities copy | fitness center, spa, outdoor pool, dining |
+| Room types referenced | Executive Room, View Room (from testimonials) |
+| Testimonials | Paul Kumi (CEO), Samuel Adams (Business Man), Felix Abbey (Banker) |
+| Third-party listing | Google: H71 Afariwa Rd, Tema · +233 30 298 5459 · 4.2 "Very good" · 123 reviews |
+
+The 123 Google reviews are a real asset — worth wiring the `qlohotelreview` module
+(post-upgrade) or a review-platform embed so on-site social proof matches Google's.
+
+### 2.5 Content defects on the live site (cheap, high-visibility wins)
+
+- **Page title typo:** `Lush VIew Hotel - lushviewhotel.net` — capital `I` in "VIew". This is
+  the browser-tab and SERP title, so it is the most visible error on the site.
+- **Placeholder alt text:** all twelve hotel-interior gallery images carry alt text
+  `Dummy Image 1` … `Dummy Image 12`. The images are real uploads; the alt text is the
+  module default, never replaced. Hurts accessibility and image SEO.
+- **Duplicated homepage blocks:** "Luxurious Rooms" ×3, "Restaurants" ×3 and
+  "Swimming Pool" ×3, each trio with byte-identical copy. This reads as demo/fixture content
+  left in place rather than three genuine rooms, restaurants and pools.
+- **Unfinished copy:** "crafted from the finest local ingredient" (truncated), "featuring
+  premium amenities ." (stray space before the period), "Swimming Pool available"
+  (placeholder sentence).
+- **Domain in the address field:** the contact address begins with `lushviewhotel.net,` — the
+  website URL has been typed into a street-address field.
+- **Copyright range starts 2010:** almost certainly boilerplate.
+
+### 2.6 Open questions for the client (blocking)
+
+1. **`lushviewhotel.com` also exists** and appears to be the same hotel carrying *different*
+   data: address "Nii Okoi Olaaye, Tema C22, Ghana", emails `info@lushviewhotel.com` and
+   `lushview6@gmail.com`, nav HOME / BOOKING / ROOMS / ABOUT / NEWS / CONTACT, and room URLs
+   like `/rooms/ds-r001/?room_type=presidential`. Is `.com` the client's too? Is it the old
+   site, a second property, or a third-party listing? **Which domain is canonical for 2.0?**
+2. A third-party listing places a "Lush View Hotel" in **Ashaiman** (H417, Nii Teeth Kple
+   Street, `GB-033-4416`, 25 bedrooms) — a different address from Tema. Same property, second
+   property, or an unrelated hotel sharing the name?
+3. **Room inventory could not be enumerated** from the public site (`/rooms` 404s; the
+   listing slug differs). Room types, rates, availability and existing bookings need
+   back-office or database access.
+4. **In-place upgrade or fresh build?** Running QloApps' own 1.7.0→1.8.0 upgrade path against
+   the live database preserves bookings and customer history. A fresh 1.8.0 install needs an
+   explicit export/import plan. These are very different projects with very different risk.
+
+### 2.7 Migration prerequisites and risks
+
+- **PHP version is the schedule risk.** 1.8.0 requires **PHP >=8.2 <8.6**. The live
+  `composer.json` still declares `>=5.4 <8.0`, though the 1.7.0 changelog claims PHP 8.1–8.4
+  support was added — so the manifest is stale and the host's *actual* PHP version must be
+  confirmed directly. **If the host runs PHP 8.1 or below, it must be upgraded before 1.8.0
+  can boot at all.** Verify this first; it is the most likely thing to derail the timeline.
+- **Channel manager is a breaking swap.** v1.8.0 removed the default
+  `qlochannelmanagerconnector` and replaced it with the combined `qlocmconnector`
+  (CHANGELOG #1952). If the client uses a channel manager, this needs configuration and data
+  migration, not just a file copy.
+- **Module count moved 59 → 61.** Diff the enabled-module list before and after.
+- **Back up the database and all uploaded media** (`img/`, `modules/*/views/img/`,
+  `upload/`, `download/`) before any upgrade attempt. The gallery and testimonial images
+  above live under module paths that an upgrade may overwrite.
+
+### 2.8 Deferred: payment gateway work
+
+Payment gateway integration is **on hold** at the client's direction. The §6.2 finding stands
+(no mobile-money gateway is bundled; zero hits for Paystack, Flutterwave, Hubtel, MoMo or
+M-Pesa) and remains the largest functional gap for a Ghanaian property — but it is not on the
+critical path for the 1.7.0 → 1.8.0 upgrade and is excluded from the action plan below until
+reinstated.
+
+---
+
+## 3. Identity and provenance
 
 | Attribute | Value |
 |---|---|
@@ -56,9 +250,9 @@ Branding is far cheaper than the raw string count suggests (see §6) — **do no
 
 ---
 
-## 3. Security audit
+## 4. Security audit
 
-### 3.1 Published CVEs — all verified patched in this snapshot
+### 4.1 Published CVEs — all verified patched in this snapshot
 
 | CVE | Class | CVSS | Status here | Evidence |
 |---|---|---|---|---|
@@ -70,9 +264,9 @@ Branding is far cheaper than the raw string count suggests (see §6) — **do no
 | CVE-2025-67325 | **Unrestricted file upload → RCE**, hotel review (≤1.7.0) | High | **Patched** | `QhrHotelReview::saveReviewImages()` applies an explicit `['jpg','png','jpeg']` allowlist with strict `in_array(..., true)`, and writes through `ImageManager::resize()` — which re-encodes the image and strips any embedded payload rather than moving raw bytes |
 
 **Conclusion: no known-vulnerable code in this tree.** The security work is deployment
-hygiene (§3.3), not patching.
+hygiene (§4.3), not patching.
 
-### 3.2 Residual code-level observations
+### 4.2 Residual code-level observations
 
 - **`search_form.tpl:85`** renders `value="{$bo_query}"` with **no template-level escape**.
   It is safe *today* only because the value is pre-sanitised by `Tools::safeOutput()` at
@@ -85,7 +279,7 @@ hygiene (§3.3), not patching.
   `PhpEncryptionLegacyEngine.php` is mcrypt-only but is gated behind `PS_CIPHER_ALGORITHM=1`
   and self-documents as deprecated. Correct posture for modern PHP.
 
-### 3.3 Deployment hardening checklist (pre-launch, blocking)
+### 4.3 Deployment hardening checklist (pre-launch, blocking)
 
 - [ ] Rename `admin-dev/` to an unguessable path — it is the back-office entry point and a
       well-known scanner target.
@@ -106,7 +300,7 @@ hygiene (§3.3), not patching.
 
 ---
 
-## 4. Install blocker: `ext-mcrypt`
+## 5. Install blocker: `ext-mcrypt`
 
 **`composer.json` declares `"ext-mcrypt": "*"`.** mcrypt was removed from PHP core in 7.2
 and is not present on any PHP 8.2–8.5 build. On a normal host, `composer install` — the very
@@ -134,11 +328,11 @@ therefore only generating an autoloader here, not resolving a dependency graph. 
 
 ---
 
-## 5. Ghana / Lush View Hotel localisation readiness
+## 6. Ghana / Lush View Hotel localisation readiness
 
 This is where the real project work lives.
 
-### 5.1 What already works
+### 6.1 What already works
 
 | Item | Status | Detail |
 |---|---|---|
@@ -148,7 +342,7 @@ This is where the real project work lives.
 | Channel distribution | ✅ Available | `qlocmconnector` (Channel Manager & API Connector, replaces the older `qlochannelmanagerconnector`) and `qlogooglehotelconnector` for Google Hotels |
 | Offline payment | ✅ Available | `bankwire` 1.1.7, `cheque` 2.6.8 |
 
-### 5.2 What is missing
+### 6.2 What is missing
 
 | Gap | Severity | Detail |
 |---|---|---|
@@ -159,14 +353,14 @@ This is where the real project work lives.
 | **Empty `zip_code_format`** | Medium | Ghana's GH row has `zip_code_format=""` while `need_zip_code="1"`. Ghana uses GhanaPostGPS digital addresses (e.g. `GA-183-6412`), not classic postal codes. Needs a deliberate decision: either supply a `LNN-NNN-NNNN`-style format or set `need_zip_code="0"` to avoid rejecting guests at checkout |
 | **No Ghana address format** | Low | `address_format.xml` has no GH entry; the default will be used. Verify it renders sensibly for Ghanaian addresses |
 
-### 5.3 Recommended localisation sequence
+### 6.3 Recommended localisation sequence
 
 1. Build `localization/gh.xml` declaring **GHS** (ISO 4217 numeric `936`, symbol `GH₵`,
    2 decimals), Ghana tax rules, and the address format.
 2. Flip GH to `contains_states="1"` and seed the 16 regions into `state.xml` **only if** you
    actually want region-level selection — otherwise leave it off and treat region as free
    text. Don't add UI friction for no benefit.
-3. Decide the postal-code policy explicitly (§5.2, row 5).
+3. Decide the postal-code policy explicitly (§6.2, row 5).
 4. **Integrate a mobile-money gateway.** Paystack and Flutterwave both support Ghana MoMo and
    both have PrestaShop-lineage module patterns to crib from. QloApps'
    `AGENTS.md` references reusable **payment-module-development** skills
@@ -177,7 +371,7 @@ This is where the real project work lives.
 
 ---
 
-## 6. Branding surface area — smaller than the raw numbers suggest
+## 7. Branding surface area — smaller than the raw numbers suggest
 
 A naive grep finds **"QloApps" 3,152 times across 1,202 files.** That number is misleading.
 Breaking it down by location:
@@ -228,7 +422,7 @@ configuration.
 
 ---
 
-## 7. Quality, testing, and CI gaps
+## 8. Quality, testing, and CI gaps
 
 | Finding | Impact |
 |---|---|
@@ -243,34 +437,74 @@ is cheap now and expensive to retrofit after the fork has diverged.
 
 ---
 
-## 8. Prioritised action plan
+## 9. Prioritised action plan
 
-### P0 — blocks installation or revenue
+Revised after the live-site discovery (§2). Payment gateway work is **deferred** at the
+client's direction (§2.8) and is listed separately at the end so it can be reinstated without
+re-planning.
 
-1. **Remove `ext-mcrypt` from `composer.json`** (§4). One-line fix, unblocks `composer install`.
-2. **Integrate a mobile-money gateway** — Paystack or Flutterwave (§5.2). Largest work item;
-   without it the engine cannot collect most guest payments.
-3. **Create GHS currency + `localization/gh.xml`** (§5.2). Cannot transact in Ghana without it.
+### P0 — production is exposed; act before any feature work
 
-### P1 — required before going live
+1. **Disable the `qlohotelreview` module on the live 1.7.0 site.** It carries
+   CVE-2025-67325 (unauthenticated file upload → RCE) and the fix is absent from v1.7.0
+   (§2.2). Re-enable after the upgrade.
+2. **Block public access to `CHANGELOG.txt` and `composer.json`** on the live site (§2.3).
+   Also `README.md`, `AGENTS.md`, `LICENSE.md`. Five-minute change; stops version disclosure.
+3. **Add a WAF rule on `bo_query`** and drop `FILE`/`DROP`/cross-database rights from the
+   MySQL user (§2.2) — mitigates CVE-2026-75497/75498 until the upgrade lands.
+4. **Confirm the host PHP version.** 1.8.0 requires **≥8.2**; the live manifest declares
+   `>=5.4 <8.0` (§2.7). If the host is below 8.2, upgrade PHP first — this gates everything.
+5. **Back up the live database and all uploaded media** (`img/`, `modules/*/views/img/`,
+   `upload/`, `download/`) before touching anything (§2.7).
 
-4. Rename `admin-dev/`; delete `install-dev/`; verify generated `.htaccess` (§3.3).
-5. Decide the Ghana postal-code policy and set `zip_code_format` / `need_zip_code` (§5.2).
-6. Configure tourism tax for Ghana's levy (§5.1).
-7. Set timezone `Africa/Accra`, country Ghana, shop name/email (§6).
-8. Swap the 6 logo assets; edit the 2 guest-facing template lines (§6).
+### P1 — the upgrade itself
 
-### P2 — durability
+6. **Decide in-place upgrade vs. fresh 1.8.0 build + data migration** (§2.6). Blocking
+   decision; the two paths diverge from here.
+7. **Remove `ext-mcrypt` from `composer.json`** (§5). One-line fix; unblocks
+   `composer install` on any supported PHP.
+8. **Diff the enabled-module list, 59 → 61**, and specifically plan the
+   `qlochannelmanagerconnector` → `qlocmconnector` swap if a channel manager is in use
+   (§2.7).
+9. **Create GHS currency and a `localization/gh.xml` pack** (§6.2). GHS appears nowhere in
+   the tree; there is no currency seed file.
+10. **Decide the Ghana postal-code policy** and set `zip_code_format` / `need_zip_code`
+    (§6.2). The current `""` + `need_zip_code="1"` combination risks rejecting guests at
+    checkout.
+11. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
+12. **Configure the tourism-tax system** for Ghana's levy — new in 1.8.0 (#1760) (§6.1).
 
-9. Add `|escape` to `search_form.tpl:85` for defence in depth (§3.2).
-10. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§7).
-11. Write tests around the booking and payment flows before customising (§7).
-12. Decide on the Ghana regions question (`contains_states` flag) (§5.2).
-13. Legal read on OSL-3.0 obligations for the attribution footer (§2, §6).
+### P2 — launch hardening and content
+
+13. Rename `admin-dev/`; delete `install-dev/`; verify the generated root `.htaccess` (§4.3).
+14. Swap the **6 logo assets** and edit the **2 guest-facing template lines** (§7).
+15. Fix the live-site content defects (§2.5): page-title typo `Lush VIew`, `Dummy Image 1–12`
+    alt text, duplicated Luxurious Rooms / Restaurants / Swimming Pool blocks, truncated copy,
+    domain name inside the address field, `2010` copyright start.
+16. Resolve the **`.com` vs `.net` domain question** and the Tema/Ashaiman address conflict
+    (§2.6) — canonical data must be settled before content is migrated.
+17. Inventory room types, rates, availability and existing bookings from the back office or
+    database; the public site does not expose them (§2.6).
+
+### P3 — durability
+
+18. Add `|escape` to `search_form.tpl:85` for defence in depth (§4.2).
+19. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§8).
+20. Write tests around the booking and payment flows before customising (§8).
+21. Decide the Ghana regions question (`contains_states` flag + `state.xml` rows) (§6.2).
+22. Legal read on OSL-3.0 obligations, especially the attribution footer (§3, §7).
+
+### Deferred — payment gateway (reinstated on request)
+
+- **Integrate a mobile-money gateway** — Paystack or Flutterwave (§6.2). Currently bundled:
+  bankwire 1.1.7, cheque 2.6.8, `qloduitkupayment` 4.0.0 (Indonesia), `qlopaypalcommerce`
+  1.0.6. Zero hits tree-wide for Paystack, Flutterwave, Hubtel, MoMo or M-Pesa. This remains
+  the largest functional gap for a Ghanaian property and should be reinstated before the site
+  is expected to take direct online revenue.
 
 ---
 
-## 9. Suggested customisation strategy
+## 10. Suggested customisation strategy
 
 Stay on the **override + module** rails rather than editing core:
 
