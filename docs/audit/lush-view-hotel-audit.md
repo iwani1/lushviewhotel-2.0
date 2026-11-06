@@ -71,7 +71,7 @@ version numbers.
 3. **Account for the `install/` → `install-dev/` and `admin/` → `admin-dev/` directory
    rename** in any deploy script, `.htaccess` rule or cron entry (§2.9).
 4. **Ghana localisation** — now added to this branch as `localization/gh.xml` (GHS + Act 1151
-   tax rules). Still open: region data and the postal-code policy (§6).
+   tax rules), guarded by CI. Still open: region data and the `need_zip_code` decision (§6).
 5. **Install blocker fixed on this branch:** `ext-mcrypt` removed from `composer.json` (§5).
 6. **Content defects on the live site** — page-title typo `Lush VIew`, `Dummy Image 1–12` alt
    text across the gallery, duplicated placeholder blocks. Cheap, high-visibility (§2.5).
@@ -438,11 +438,48 @@ This is where the real project work lives.
 | Gap | Severity | Detail |
 |---|---|---|
 | **No mobile-money gateway** | **Critical** | Bundled payment modules are bankwire, cheque, `qloduitkupayment` 4.0.0 (**Indonesia**), `qlopaypalcommerce` 1.0.6. A full-tree grep for `paystack`, `flutterwave`, `hubtel`, `mobile money`, `momo`, `mpesa` returns **zero hits**. In Ghana, MoMo is the dominant rail; card penetration is low. Without it, the booking engine cannot take the payments most guests will offer |
-| **No `localization/gh.xml`** | High | 78 country packs are shipped — including Nigeria (`ng.xml`), Kenya (`ke.xml`), Egypt (`eg.xml`) — but **not Ghana** |
-| **GHS currency absent** | High | `GHS` occurs **0 times** in `localization/` and install data. There is no `currency.xml` seed file at all; currencies only enter the system via a `LocalizationPack` import (`classes/LocalizationPack.php:286-309`) or manual creation in the back office. So GHS must be created by hand or by building a `gh.xml` pack |
+| **No `localization/gh.xml`** | **DONE** | Upstream v1.8.0 ships 82 country packs (plus `default.xml`) — including Nigeria (`ng.xml`), Kenya (`ke.xml`) and Egypt (`eg.xml`) — but **not Ghana**. **Added on this branch** (commit `c25596c`), bringing the total to 83. See §6.3 |
+| **GHS currency absent** | **DONE** | `GHS` occurred **0 times** in `localization/` and install data, and there is no `currency.xml` seed file at all — currencies only enter via a `LocalizationPack` import (`classes/LocalizationPack.php:282-317`) or manual back-office creation. **Resolved** by the `gh.xml` pack, which declares GHS (ISO 4217 numeric 936, sign `₵` U+20B5, 2 decimals, `format="1"` + `blank="1"` → `₵ 1,234.56`) |
 | **Ghana regions not seeded** | Medium | `state.xml` contains 312 states, **none** for Ghana. Compounding this, the GH country row is flagged `contains_states="0"` — so the 16 Ghanaian regions will not even be collected as states unless that flag is flipped and rows added |
-| **Empty `zip_code_format`** | Medium | Ghana's GH row has `zip_code_format=""` while `need_zip_code="1"`. Ghana uses GhanaPostGPS digital addresses (e.g. `GA-183-6412`), not classic postal codes. Needs a deliberate decision: either supply a `LNN-NNN-NNNN`-style format or set `need_zip_code="0"` to avoid rejecting guests at checkout |
+| **Mandatory postcode with no format** | Medium | Ghana's GH row has `zip_code_format=""` **and** `need_zip_code="1"`. Verified in code, this does **not** reject Ghanaian addresses — but it does make the postcode field **mandatory**. See the corrected analysis below |
 | **No Ghana address format** | Low | `address_format.xml` has no GH entry; the default will be used. Verify it renders sensibly for Ghanaian addresses |
+
+#### Corrected: what `zip_code_format=""` + `need_zip_code="1"` actually does
+
+An earlier draft of this audit claimed Ghana's empty `zip_code_format` combined with
+`need_zip_code="1"` would **reject guests at checkout**. Reading the validation path shows
+that is **wrong**, and the real behaviour is the opposite of a format rejection:
+
+- `Country::checkZipCode()` (`classes/Country.php:376-378`) returns **`true` immediately**
+  when `zip_code_format` is empty — no format is enforced at all.
+- `Address.php:573` guards the check with `$objCountry->zip_code_format && ...`, so with an
+  empty format the branch is skipped entirely.
+- `Validate::isPostCode()` (`classes/Validate.php:644-647`) accepts `/^[a-zA-Z 0-9-]+$/`,
+  which comfortably matches a GhanaPostGPS code such as `GA-183-6412` (verified) and legacy
+  numeric forms like `00233`.
+
+So **Ghanaian addresses are accepted.** The genuine consequence is narrower: `Address.php:575`
+rejects an **empty** postcode because `need_zip_code="1"`, so the field is **mandatory** —
+guests who do not know their GhanaPostGPS code are forced to enter something. That is a
+conversion risk at checkout, not a validation failure.
+
+Two related findings worth knowing:
+
+- **Silent placeholder generation.** `Tools::generateRandomZipcode()` (`classes/Tools.php:84-114`)
+  falls back to **five random digits** when `need_zip_code` is set but `zip_code_format` is
+  empty. It is called by `HotelHelper.php:2020` for hotel addresses and by
+  `qlocmconnector`'s `WebserviceSpecificManagementCmApi.php:4749,4752` for guest details. So
+  channel-manager bookings and hotel records can acquire **fabricated postcodes** that look
+  legitimate. If postcode data matters for reporting or tax jurisdiction, this needs
+  attention.
+- **Adding a format would make things worse.** Setting `zip_code_format="LNN-NNN-NNNN"` to
+  match GhanaPostGPS would start *rejecting* the many guests who enter a legacy code, a
+  street name, or nothing meaningful. The current empty format is more permissive and is
+  probably the right default.
+
+**Recommendation (revised):** leave `zip_code_format` empty. Decide `need_zip_code` on
+conversion grounds — set it to `0` if forcing a postcode is costing bookings, otherwise leave
+it at `1`. Either way, do not add a GhanaPostGPS format mask.
 
 ### 6.3 Recommended localisation sequence
 
@@ -451,7 +488,9 @@ This is where the real project work lives.
 2. Flip GH to `contains_states="1"` and seed the 16 regions into `state.xml` **only if** you
    actually want region-level selection — otherwise leave it off and treat region as free
    text. Don't add UI friction for no benefit.
-3. Decide the postal-code policy explicitly (§6.2, row 5).
+3. Decide `need_zip_code` on conversion grounds and **leave `zip_code_format` empty**
+   (§6.2, corrected analysis). Do not add a GhanaPostGPS format mask — it would start
+   rejecting guests the current permissive behaviour accepts.
 4. **Integrate a mobile-money gateway.** Paystack and Flutterwave both support Ghana MoMo and
    both have PrestaShop-lineage module patterns to crib from. QloApps'
    `AGENTS.md` references reusable **payment-module-development** skills
@@ -603,9 +642,13 @@ Items marked **DONE** are already committed on this branch.
 11. **DONE — create GHS currency and `localization/gh.xml`** (§6.2). Committed `c25596c` with
     Act 1151 tax rules (VAT 15% + NHIL 2.5% + GETFund 2.5% = 20%, `behavior="1"` combine, not
     compound). **Rates still need sign-off from the client's accountant.**
-12. **Decide the Ghana postal-code policy** and set `zip_code_format` / `need_zip_code`
-    (§6.2). The current `""` + `need_zip_code="1"` combination risks rejecting guests at
-    checkout. GhanaPostGPS is not a classic postal code.
+12. **Decide `need_zip_code` only** — leave `zip_code_format` empty (§6.2, corrected
+    analysis). The earlier claim that an empty format rejects guests was wrong:
+    `Country::checkZipCode()` returns `true` when the format is empty, and
+    `Validate::isPostCode()` already accepts GhanaPostGPS codes like `GA-183-6412`. The real
+    issue is that `need_zip_code="1"` makes the field **mandatory**, which is a conversion
+    risk. Also note `Tools::generateRandomZipcode()` fabricates five random digits for Ghana
+    in hotel and channel-manager records.
 13. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
 14. **Configure the tourism-tax system** for Ghana's 1% GTA Tourism Development Levy via
     `QLO_USE_TOURISM_TAX` + `TaxConfiguration` — new in 1.8.0 (#1760). Prefer this over the
