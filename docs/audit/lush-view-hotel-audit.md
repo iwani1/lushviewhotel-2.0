@@ -273,9 +273,12 @@ The 123 Google reviews are a real asset — worth wiring the `qlohotelreview` mo
   The live `composer.json` still declares `>=5.4 <8.0`, but that manifest is stale; the
   production database export records the host's actual runtime as **PHP 8.4.27** (§2.1),
   which sits inside the supported range. **No PHP upgrade is needed before 1.8.0 can boot.**
-  What still needs checking is the *other* extensions 1.8.0 requires (`intl`, `gd`,
-  `openssl`, `mbstring`, `zip`, `curl`) — see §5, where `ext-mcrypt` is deliberately **not**
-  among them.
+  What still needs checking is the rest of the installer's own requirement list, taken from
+  `install-dev/controllers/http/system.php:88-103`: extensions **`gd`, `pdo_mysql`, `curl`,
+  `soap`, `openssl`, `simplexml`, `zip`**, plus **`memory_limit` ≥ 128M**,
+  **`max_execution_time` ≥ 500**, **`upload_max_filesize` ≥ 16M**, **`allow_url_fopen` = On**,
+  and the ability to upload files and create files/folders. Note that `intl` and `mbstring`
+  are **not** required, and neither is `ext-mcrypt` (§5).
 - **Channel manager is a breaking swap.** v1.8.0 removed the default
   `qlochannelmanagerconnector` and replaced it with the combined `qlocmconnector`
   (CHANGELOG #1952). **This now applies: the production database shows
@@ -796,8 +799,10 @@ Items marked **DONE** are already committed on this branch.
    host as **PHP 8.4.27** on **MariaDB 11.4.13**, inside 1.8.0's supported `>=8.2 <8.6` range
    (§2.1, §2.7). The stale live manifest (`>=5.4 <8.0`) was the only thing suggesting
    otherwise, so **no PHP upgrade is required before 1.8.0 can boot**. What remains is
-   confirming the other required extensions (`intl`, `gd`, `openssl`, `mbstring`, `zip`,
-   `curl`) — note that `ext-mcrypt` is deliberately **not** among them (§5).
+   confirming the rest of the installer's requirement list (§2.7): extensions `gd`,
+   `pdo_mysql`, `curl`, `soap`, `openssl`, `simplexml`, `zip`, plus `memory_limit` ≥ 128M,
+   `max_execution_time` ≥ 500, `upload_max_filesize` ≥ 16M and `allow_url_fopen` = On.
+   `intl`, `mbstring` and `ext-mcrypt` are **not** required (§5).
 6. **Back up the live database and all uploaded media** (`img/`, `modules/*/views/img/`,
    `upload/`, `download/`) before touching anything (§2.7). Media under module paths can be
    overwritten by an upgrade.
