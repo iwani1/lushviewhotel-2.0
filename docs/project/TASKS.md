@@ -28,6 +28,10 @@ Last updated: 2026-11-06 · Branch `arena/07df51c3-lushviewhotel-2-0` · PR #1 o
 | A16 | Phase 1 technical assessment | `docs/project/01-phase1-technical-assessment.md` |
 | A17 | Architecture and branding design | `docs/project/02-architecture-and-branding.md` |
 | A18 | Migration strategy, risk register, phased plan, rollback | `docs/project/03-migration-risks-and-plan.md` |
+| A19 | **Full application static audit** — 2,121 first-party PHP files + 713 templates scanned, every lead manually verified against source. 9 findings (G1–G9), 9 leads investigated and **cleared**, licence inventory, PHP 8 compatibility, directory-protection matrix | `docs/audit/full-application-audit.md` |
+| A20 | Password-posture analysis — **bcrypt is the primary algorithm** (`classes/PasswordHashing.php:105`) with MD5 as legacy fallback, and **transparent rehash-on-login for both customers** (`classes/Customer.php:413-415`) **and employees** (`classes/Employee.php:303-305`). All 1,257 live customer hashes and 15 employee hashes are MD5-era, so they migrate to bcrypt automatically as each user logs in after the upgrade | `docs/audit/full-application-audit.md` §5 |
+| A21 | Confirmed Smarty auto-escape is **off** (`$smarty->escape_html` is read at `config/smarty.config.inc.php:80`, never set) — 5,323 of 9,501 `{$…}` output tags across 553 templates carry no escape modifier | `docs/audit/full-application-audit.md` §G3 |
+| A22 | Found a latent channel-manager defect: constant password `'qloChannelCustomer'` stored unhashed plus an undefined `$context` at `modules/hotelreservationsystem/classes/HotelBookingDetail.php:3118-3120`. Verified **not exercised** — 0 of 1,257 live customers match | `docs/audit/full-application-audit.md` §G1 |
 
 ### Code changes committed
 | Ref | Change | File(s) | Commit |
@@ -64,6 +68,28 @@ Last updated: 2026-11-06 · Branch `arena/07df51c3-lushviewhotel-2-0` · PR #1 o
 | S4 | **Rotate all 15 employee passwords**; force resets for 1,257 customer accounts | Client | Hashes are MD5-era and must be treated as disclosed |
 | S5 | **Legal read on breach notification** — Ghana Data Protection Act 2012 (Act 843); GDPR if EU data subjects | Client / counsel | Customer base includes corporate and international domains |
 | S6 | Apply `docs/deploy/live-site-hardening.md` — block `CHANGELOG.txt` and `composer.json`, WAF rule on `bo_query`, MySQL privilege reduction | Client | Both files are currently publicly served on the live site, disclosing the exact version |
+
+## ⬜ Outstanding — code remediation from the full application audit
+
+Full detail and evidence in `docs/audit/full-application-audit.md` §3 and §11.
+
+| Ref | Action | Severity | Phase |
+|---|---|---|---|
+| F1 | Remove `admin-dev/filemanager/` unless its use is confirmed — 32 unlicensed third-party files gated only by the static session string `'RESPONSIVEfilemanager'` (`upload.php:3`) | Medium-High | 3 |
+| F2 | Override `Customer::add()` to generate `secure_key` with `random_bytes()` instead of `md5(uniqid(rand(), true))` (`classes/Customer.php:251`, 7 similar sites) | Medium | 3 |
+| F3 | Decide the channel-manager question; if used, override `HotelBookingDetail::createQloCustomerChannelCustomerInfo()` to set a random hashed password and fix the undefined `$context` at line 3120 | Medium | 3 |
+| F4 | Add a CI rule failing when a *changed* template introduces a new bare `{$var}` output tag (5,323 exist today; do **not** enable global `escape_html` — it breaks invoice PDFs) | Medium | 3 |
+| F5 | Delete `classes/module/ImportModule.php` — uses `mysql_*` removed in PHP 7, verified unreachable (zero references) | Low | 3 |
+| F6 | Add explicit deny rules for `cache/` — `index.php` blocks listing but not direct access, and `cache/class_index.php` integrity is a security boundary because the autoloader `eval()`s from it | Low-Medium | 7 |
+| F7 | Add workflow tests for reservation, walk-in, housekeeping and payment flows — `tests/` has 7 files and **0** `*Test.php` | Medium | 6 |
+| F8 | Legal read on OSL-3.0 §6 attribution plus the 141 files with no licence header (incl. 26 mail templates in scope for branding, and 20 files in `qlocrontaskmanager`, new in 1.8.0) | Medium | 2 |
+
+**Cleared — no action needed**, recorded so they are not re-investigated:
+`admin-dev/displayImage.php:36` (guarded by `Validate::isMd5`), `config/defines.inc.php:34-35`
+(`display_errors` correctly gated behind `_PS_MODE_DEV_`, default false),
+`classes/ImageManager.php:326-331` (`exec` is last resort behind `function_exists` with
+`escapeshellarg`), `modules/qlocrontaskmanager:198-207` (`shell_exec` guarded by both
+`function_exists` and a `disable_functions` check), and committed secrets (none — only CA bundles).
 
 ## ⬜ Outstanding — decisions needed, not blocking Phase 3
 
