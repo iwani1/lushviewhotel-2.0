@@ -486,10 +486,18 @@ per-install secret that did **not** leak. They are therefore not bare MD5 and ca
 looked up in a rainbow table. They are still MD5, still fast to brute-force if the salt is
 ever recovered, and must be treated as compromised.
 
-**Remediation — repository (done on this branch):**
+**Remediation — repository (executed and verified on this branch):**
 
-- [x] The export commit was **removed from branch history** and the branch force-pushed, so
-      the file is no longer in the branch tree or in PR #1.
+- [x] The export commit was **removed from branch history**. The branch was rebuilt from the
+      last clean commit and force-pushed, so no commit in the branch range contains the file.
+      Verified three ways: `git log HEAD -- <file>` returns nothing; a per-commit
+      `git ls-tree -r` scan of every tree in the rewritten range finds no root-level `.sql`
+      outside `install-dev/`; and the contents API returns **404** for the file at the branch
+      tip. PR #1's head moved to the rewritten commit and remains `OPEN` / `MERGEABLE`, so
+      merging will no longer carry the export onto `main`.
+- [x] The commit message that documented the `.gitignore` change was **reworded during the
+      rewrite** so it no longer names the purged commit. Citing that SHA in a public commit
+      message would have handed a reader the exact dangling object to request.
 - [x] `.gitignore` now excludes `*.sql` (plus `*.sql.gz`, `*.sql.bz2`, `*.sql.zip`,
       `*.sqlite`, `*.sqlite3`, `*.db`) with negations preserving the schema and upgrade SQL
       that QloApps itself ships under `install-dev/`. A future `git add -A` cannot repeat
@@ -499,15 +507,39 @@ ever recovered, and must be treated as compromised.
 
 **Remediation — still required, and outside what git can fix:**
 
-- [ ] **The blob is not gone from GitHub.** Rewriting history makes the commit unreachable
-      from the branch, but GitHub keeps unreachable objects until it garbage-collects, and
-      anyone who fetched, forked, cloned, or cached the commit in the ~20 minutes it was
-      public may still hold a copy. **Contact GitHub Support to request removal of the cached
-      views and a purge of the dangling commit**, and treat the data as disclosed.
-- [ ] **Consider making the repository private.** The client chose to keep it public for now;
-      that is a defensible choice for the code, but it means any future accidental commit of
-      operational data is instantly public. If the repo does not need to be public, private is
-      the safer default.
+- [ ] **CRITICAL — the blob is still publicly downloadable.** Rewriting history makes the
+      commit unreachable *from the branch*, but GitHub retains unreachable objects until it
+      garbage-collects, and it still serves them by SHA. Confirmed with **unauthenticated**
+      requests after the force-push — all three returned HTTP **200**:
+
+      | Unauthenticated request | Result |
+      |---|---|
+      | `GET /repos/iwani1/lushviewhotel-2.0` | 200 |
+      | `GET /repos/…/git/blobs/<blob-sha>` | 200 — 16,140,519 bytes served |
+      | `GET /repos/…/commits/<purged-commit-sha>` | 200 — commit still resolves |
+
+      So **the data must be treated as disclosed**, and the exposure window is not closed by
+      the force-push. Two things are needed:
+      1. **Contact GitHub Support** (<https://support.github.com/contact>) to request removal
+         of cached views and a purge of the dangling commit and blob. Supply the repository
+         name, the purged commit SHA, the blob SHA and the file path — Support needs the exact
+         objects, and only the repository owner can file this.
+      2. **Make the repository private** (next item). This is the only mitigation that takes
+         effect immediately and does not depend on Support.
+- [ ] **Make the repository private — owner action required.** The repository is still
+      `isPrivate=false`. This was attempted programmatically and **failed with HTTP 403
+      "Resource not accessible by integration"**: the automation runs under a GitHub App
+      installation token whose `x-oauth-scopes` header is empty, and changing repository
+      visibility requires the app's **Administration** permission. Note that the token reports
+      `permissions.admin=true` on the repo — that is *not* sufficient; the block is at the
+      installation-policy level. It must be done by hand:
+      **GitHub → `iwani1/lushviewhotel-2.0` → Settings → Danger Zone → Change repository
+      visibility → Private.** The repository has **0 forks, 0 watchers, 0 stars**, so making
+      it private detaches nothing and costs nothing. PR #1 and CI are unaffected.
+- [ ] Anyone who fetched, cloned, forked or cached the commit during the window may hold a
+      copy. The zero fork/watcher/star counts make wide secondary spread unlikely, but
+      automated secret-scraping bots do harvest public GitHub repositories, so retrieval
+      during the window cannot be ruled out.
 - [ ] **Rotate all 15 back-office employee passwords immediately.** All 15 accounts are
       `active=1`. This is the highest-value credential set in the export — it grants access to
       guest PII and the ability to alter bookings.
