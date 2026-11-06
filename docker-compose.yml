@@ -16,7 +16,15 @@
 services:
   db:
     # Pinned to match production exactly: the live server runs MariaDB 11.4.13.
-    image: mariadb:11.4
+    #
+    # Fully qualified on purpose. Podman resolves bare image names through
+    # /etc/containers/registries.conf.d/000-shortnames.conf, and on Fedora that
+    # file maps "mariadb" to registry.fedoraproject.org/mariadb, which does not
+    # publish an 11.4 tag - the pull fails with "manifest unknown". Naming the
+    # registry explicitly bypasses short-name resolution on every runtime.
+    # (Fedora maps "php" to docker.io, which is why the app image pulled fine
+    # while this one did not - do not read that as mariadb being the only risk.)
+    image: docker.io/library/mariadb:11.4
     container_name: qlo-db
     restart: unless-stopped
     environment:

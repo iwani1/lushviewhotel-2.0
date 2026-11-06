@@ -152,11 +152,11 @@ This project is built to work this way:
 - `dev/docker/entrypoint.sh` waits for MariaDB itself, so the compose file uses the short
   `depends_on: [db]` form rather than `condition: service_healthy`, which `podman-compose`
   has supported inconsistently across versions.
-- The same entrypoint detects **rootless** Podman via `/run/.containerenv` and runs Apache as
-  container root — which under rootless Podman *is* your host user — instead of chowning the
-  repository to `www-data`. Without that, `modules/` and `img/` would end up owned by a host
-  subuid such as 100032 and you would no longer be able to edit your own source files.
-  It prints the resolved Apache user on every start so you can confirm this worked; see §10.3.
+- The same entrypoint works out which uid/gid Apache should run as by statting the bind mount,
+  so it never has to chown your repository. Under rootless Podman the naive
+  `chown -R www-data` would hand `modules/` and `img/` to a host **subuid** such as 100032 and
+  you would no longer be able to edit your own source files. It prints what it decided on every
+  start; see §10.3.
 
 Missing podman-compose?
 
@@ -540,9 +540,19 @@ getenforce                     # "Enforcing" means SELinux is active
 A temporary test (re-enable afterwards) is `sudo setenforce 0`. If that fixes it, the `:z`
 labels are missing or the entrypoint did not run.
 
-File ownership is fixed at container start by `dev/docker/entrypoint.sh`, which `chown`s the
-twelve directories the installer checks. If you added a new directory that needs writing,
-add it to `WRITABLE_DIRS` in that file.
+Write access is arranged at container start by `dev/docker/entrypoint.sh`. It does **not** chown
+your working copy (see §10.3 for why that would be harmful); it either runs Apache as the uid
+that already owns the mount, or adds group-write to the twelve paths the installer checks. If
+you added a new directory that needs writing, add it to `QLO_WRITABLE_PATHS` in that file.
+
+The entrypoint logs exactly what it decided, which is the fastest way to diagnose this:
+
+```bash
+podman-compose logs app | grep qlo-entrypoint      # or: docker compose logs app | ...
+```
+
+If the self-check line says Apache cannot write `/var/www/html/config`, it prints the actual
+uid, gid and mode so you can see which side of the mismatch you are on.
 
 ### 10.2 The installer cannot connect to the database
 
@@ -556,67 +566,121 @@ docker compose exec app bash -c 'mariadb -h db -uqlo -pqlo_dev_only -e "SHOW DAT
 You should see `qloapps_fresh`. If that fails, the db container is not healthy — check
 `docker compose logs db`.
 
-### 10.3 Files created by the container are owned by the wrong user
+### 10.3 File ownership — and why the container never chowns your repository
 
-With **Docker**, files the container writes (caches, generated images,
-`config/settings.inc.php`) appear on your machine owned by uid 33 (`www-data`). Your own
-files stay yours, so this is usually harmless. To reclaim everything if it becomes annoying:
+Everything under the project root is bind-mounted, so any ownership or permission change the
+container makes happens to your **real working copy**. This environment is deliberately built
+never to change ownership.
 
-```bash
-sudo chown -R $UID:$UID .
-git config --global --add safe.directory "$PWD"
-```
-
-With **rootless Podman** the mapping is different, and the naive fix above would be actively
-harmful:
+What each runtime does to uid 33 (`www-data`):
 
 | Runtime | container uid 0 | container `www-data` (uid 33) |
 | --- | --- | --- |
 | Docker (rootful) | host root | host uid 33 |
 | Podman (rootless) | **your host user** | a host **subuid**, e.g. 100032 |
 
-So under rootless Podman, chowning `modules/` or `img/` to `www-data` would transfer those
-tracked source files on your host to an unmapped subuid — you would no longer be able to edit
-your own code, and git would complain.
+So `chown -R www-data` would transfer tracked source files to a uid that is not you — under
+rootless Podman an unmapped subuid, after which you could no longer edit your own code and git
+would flag every file. Chowning the repository *root* would be worse: you would lose the
+ability to create files in your own clone.
 
-`dev/docker/entrypoint.sh` handles this. It detects rootless Podman by reading
-`/run/.containerenv` (a file Podman creates and Docker does not) and checking for `rootless=1`.
-When it matches, the entrypoint runs Apache as **container root — which is your host user —**
-and skips the chown entirely, so files written by the app land on your host already owned by
-you. Under Docker it keeps the conventional `www-data` + chown behaviour.
+**What `dev/docker/entrypoint.sh` does instead.** It stats the bind mount to find out who
+already owns your files, then takes one of two paths:
 
-For this to work the image patches Debian's `/etc/apache2/envvars`, which otherwise hardcodes
-`export APACHE_RUN_USER=www-data` and would silently override anything we export. The
-`Dockerfile` rewrites it to `${APACHE_RUN_USER:-www-data}` and prints the result during the
-build.
+1. **The mount is owned by a non-zero uid** — true under rootful Docker, and under rootless
+   Podman with `--userns=keep-id`. The entrypoint registers that uid/gid in the container's
+   `/etc/passwd` and `/etc/group` if needed, and runs Apache *as that identity*. The process
+   then owns the files, so **nothing on your host is chowned or chmod'd at all**.
+2. **The mount appears owned by uid 0** — rootless Podman's default user namespace, where
+   container root *is* your host user. Apache cannot run as uid 0 (see below), so the
+   entrypoint runs Apache as `www-data` with the mount's **group** and adds group-write
+   (`chmod -R g+rwX`) to the twelve paths the installer checks. Ownership is untouched, and
+   because git does not track group permission bits, `git status` stays clean.
 
-**Verify it on first start.** The entrypoint reports what it decided:
+The twelve paths come from `install-dev/controllers/http/system.php:88-103`. `.git` is never
+touched — changing the owner of git internals corrupts the repository.
+
+**Why Apache is not simply run as root under rootless Podman.** It is tempting, because
+container root *is* your host user and the files would already have the right owner. httpd
+refuses it outright — `modules/arch/unix/mod_unixd.c`, `unixd_set_user()`:
+
+```c
+#if !defined (BIG_SECURITY_HOLE) && !defined (OS2)
+    if (ap_unixd_config.user_id == 0) {
+        return "Error:\tApache has not been designed to serve pages while\n"
+                "\trunning as root. ...";
+    }
+#endif
+```
+
+The check is compiled out only with `-DBIG_SECURITY_HOLE`, which the Debian package does not
+use. `unixd_set_group()` has **no** equivalent check, which is what makes path 2 possible.
+
+A second constraint from the same file, `set_group_privs()`, is that a numeric `User #uid` must
+have an `/etc/passwd` entry or Apache aborts with `APLOGNO(02155) getpwuid`. That is why the
+entrypoint registers the uid instead of passing it straight through.
+
+**Verify it on first start:**
 
 ```bash
-docker compose logs app | grep qlo-entrypoint
+podman-compose logs app | grep qlo-entrypoint      # or: docker compose logs app | ...
 ```
 
-Look for these lines:
+Path 1 looks like this:
 
 ```
-[qlo-entrypoint] rootless Podman detected - requesting Apache run as
-[qlo-entrypoint] /etc/apache2/envvars resolves APACHE_RUN_USER to: #0
+[qlo-entrypoint] Bind mount is owned by uid=1000 gid=1000.
+[qlo-entrypoint] Running Apache AS that identity (you:you); no host ownership or permission changes needed.
+[qlo-entrypoint] Self-check: Apache (uid 1000, gid 1000) can write /var/www/html/config.
 ```
 
-`#0` means the override took effect. If it says `www-data` while you are on rootless Podman,
-the envvars patch did not apply — the entrypoint prints a WARNING saying so, and repository
-files may end up owned by a subuid. Either switch to Docker, or reclaim ownership afterwards:
+Path 2 looks like this:
 
-```bash
-sudo chown -R $UID:$UID .
-git config --global --add safe.directory "$PWD"
+```
+[qlo-entrypoint] Bind mount appears owned by uid=0 gid=0.
+[qlo-entrypoint] Apache cannot run as uid 0, so running as www-data:root and adding group-write.
+[qlo-entrypoint] Self-check: Apache (uid 33, gid 0) can write /var/www/html/config.
 ```
 
-To see the host-side mapping for yourself:
+The entrypoint **refuses to start Apache** if the resolved user would be root or has no passwd
+entry, and warns with the actual uid/gid/mode if the writability self-check fails — so a
+misconfiguration surfaces as one clear line rather than a wall of PHP permission errors
+halfway through the install.
+
+**Files Apache creates** (in `cache/`, `img/`, `log/`, `upload/`) are owned by whatever uid it
+runs as. Under path 2 that is container uid 33, which appears on your host as a subuid in your
+range:
 
 ```bash
 podman unshare cat /proc/self/uid_map
 ```
+
+Those paths are all gitignored, and you own their parent directories, so you can delete them
+from the host normally. To have them arrive owned by you instead, use §10.3.1.
+
+#### 10.3.1 Optional: make container-written files belong to you (rootless Podman)
+
+Create `docker-compose.podman.yml` next to `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    userns_mode: keep-id
+```
+
+Then start with both files:
+
+```bash
+podman-compose -f docker-compose.yml -f docker-compose.podman.yml up -d --build
+```
+
+`keep-id` maps your host uid to the same number inside the container, so the bind mount stops
+looking like it is owned by uid 0 and the entrypoint takes path 1: Apache runs as you, files it
+writes are owned by you, and no group-write chmod is needed.
+
+This file is deliberately **not committed** — `userns_mode: keep-id` is Podman-specific and
+Docker rejects it. If your `podman-compose` version does not support the key, stay on the
+default; path 2 works fine without it.
 
 Finally, SELinux `:z` relabelling behaves the same under both runtimes, and both bind mounts in
 `docker-compose.yml` carry it.
@@ -650,6 +714,39 @@ breaks rewriting). If URLs still 404, regenerate them from the back office:
 
 ---
 
+### 10.7 Podman pulls the wrong registry — `manifest unknown` for `mariadb:11.4`
+
+Symptom, during `podman-compose up -d --build`:
+
+```
+Resolved "mariadb" as an alias (/etc/containers/registries.conf.d/000-shortnames.conf)
+Trying to pull registry.fedoraproject.org/mariadb:11.4...
+Error: reading manifest 11.4 in registry.fedoraproject.org/mariadb: manifest unknown
+```
+
+Podman resolves a bare image name through its **short-names** table, and Fedora ships
+`/etc/containers/registries.conf.d/000-shortnames.conf`, which maps `mariadb` to
+`registry.fedoraproject.org/mariadb`. That registry is Fedora's own package-oriented registry
+and it does not publish an `11.4` tag, so the pull fails.
+
+This is why the `app` service built fine while `db` did not: Fedora's table happens to map
+`php` to `docker.io`, so the two services resolved to different registries. The
+`"qlo-db" is not a valid container, cannot be used as a dependency` error that follows is just a
+cascade — the database image never arrived, so the app could not start.
+
+The fix is already in this repository: `docker-compose.yml` names the image
+`docker.io/library/mariadb:11.4`, and `dev/docker/Dockerfile` uses
+`FROM docker.io/library/php:8.4-apache-bookworm`. A fully qualified reference bypasses
+short-name resolution on every runtime, so Docker and Podman behave identically. If you add
+another service, qualify its image the same way.
+
+To see what your own system would resolve a short name to:
+
+```bash
+grep -rn "^mariadb=" /etc/containers/registries.conf.d/ 2>/dev/null
+podman info --format '{{.Registries}}'
+```
+
 ## 11. Safety rules for local development
 
 These come from §9 of the project brief and are not negotiable:
@@ -680,7 +777,7 @@ These come from §9 of the project brief and are not negotiable:
 | `docker-compose.yml` | MariaDB 11.4 + PHP 8.4/Apache, SELinux-labelled mounts, loopback-only ports |
 | `dev/docker/Dockerfile` | builds the required PHP extensions, enables `mod_rewrite`, sets `AllowOverride All` |
 | `dev/docker/php.ini` | exceeds every installer minimum; timezone `Africa/Accra`; opcache revalidating |
-| `dev/docker/entrypoint.sh` | waits for MariaDB to accept connections, detects rootless Podman and runs Apache as your host user when it does (otherwise fixes ownership on the twelve directories the installer requires to be writable), and reports the resolved Apache user on every start |
+| `dev/docker/entrypoint.sh` | waits for MariaDB to accept connections; stats the bind mount and runs Apache as the uid that already owns it (registering that uid/gid in the container's passwd/group), falling back to `www-data` plus group-write on the twelve installer-checked directories when the mount looks owned by uid 0 — which Apache refuses to run as; never chowns the working copy or `.git`; verifies the result and reports it on every start |
 | `dev/docker/initdb/README.md` | optional first-run SQL drop point (left empty) |
 | `dev/scripts/use-db.sh` | switch between `qloapps_fresh` and `qloapps_live`, clearing caches |
 | `dev/scripts/import-live-dump.sh` | validated, production-incapable import of the live dump |
