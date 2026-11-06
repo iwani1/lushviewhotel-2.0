@@ -36,7 +36,6 @@
         "ext-curl": "*",
         "ext-dom": "*",
         "ext-gd": "*",
-        "ext-mcrypt": "*",
         "ext-openssl": "*",
         "ext-pdo_mysql": "*",
         "ext-phar": "*",
