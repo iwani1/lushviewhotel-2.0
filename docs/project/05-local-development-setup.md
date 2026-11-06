@@ -336,6 +336,115 @@ every existing 32-character MD5 hash still fits in `varchar(60)` and stays valid
 
 ## 10. Troubleshooting
 
+### 10.0 `docker compose` fails immediately — "unknown shorthand flag: 'd' in -d"
+
+This is the most common first failure on Fedora, so it comes first.
+
+**Symptom**
+
+```console
+$ docker compose up -d --build
+unknown shorthand flag: 'd' in -d
+
+Usage:  docker [OPTIONS] COMMAND [ARG...]
+
+$ docker compose exec app php install-dev/index_cli.php --step=all ...
+unknown flag: --step
+
+Usage:  docker [OPTIONS] COMMAND [ARG...]
+```
+
+**Cause.** `docker compose` (version 2) is a *CLI plugin*, not part of the `docker` binary.
+These errors mean the plugin is missing, so `docker` does not understand `compose` as a
+subcommand and instead tries to parse the flags that follow it (`-d`, `--step`) as its own —
+and rejects them. The two usual reasons on Fedora:
+
+1. `docker-compose-plugin` was never installed (only `docker-ce-cli`, or nothing at all), or
+2. your `docker` is actually **Podman** through Fedora's `podman-docker` compatibility
+   package, which prints usage as `docker [...]` and has no compose backend installed.
+
+**This is not a problem with the commands or with the repository.** No container was created,
+no volume was created, and nothing needs cleaning up. Fix the tooling and re-run the same
+commands unchanged.
+
+**Diagnose — paste this as one block**
+
+```bash
+echo "== what is 'docker' =="; command -v docker; readlink -f "$(command -v docker)"; docker --version
+echo "== compose v2 plugin =="; docker compose version 2>&1 | head -3
+echo "== plugin directories =="; ls /usr/libexec/docker/cli-plugins/ ~/.docker/cli-plugins/ 2>/dev/null
+echo "== standalone binaries =="; command -v docker-compose podman podman-compose 2>/dev/null
+echo "== installed packages =="; rpm -q docker-ce docker-ce-cli docker-compose-plugin podman podman-docker podman-compose 2>/dev/null
+```
+
+How to read it:
+
+- If `readlink -f` resolves to `/usr/bin/podman`, you have `podman-docker`, not Docker.
+- If `docker compose version` prints something like `Docker Compose version v2.29.7`, the
+  plugin is present and the cause is elsewhere — re-check that you ran the command from the
+  repository root, where `docker-compose.yml` lives.
+- If `rpm -q docker-compose-plugin` reports "not installed", that is the whole problem.
+
+**Fix A — install Docker CE and the compose plugin (recommended)**
+
+```bash
+sudo dnf -y remove docker-client docker-client-latest docker-common \
+                   docker-latest docker-engine podman-docker
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Then **log out and back in** — the group change only applies to new sessions — and verify:
+
+```bash
+docker compose version
+docker run --rm hello-world
+```
+
+Removing `podman-docker` matters: while it is installed, `/usr/bin/docker` keeps pointing at
+Podman and shadows the real Docker CLI.
+
+**Fix B — you already have Docker CE and only the plugin is missing**
+
+```bash
+sudo dnf -y install docker-compose-plugin
+docker compose version
+```
+
+If your repo does not carry it, install the plugin per-user instead:
+
+```bash
+mkdir -p ~/.docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+     -o ~/.docker/cli-plugins/docker-compose
+chmod +x ~/.docker/cli-plugins/docker-compose
+docker compose version
+```
+
+On an ARM machine substitute `docker-compose-linux-aarch64`.
+
+**Fix C — use Podman instead**
+
+```bash
+sudo dnf -y install podman podman-compose
+podman compose version          # or: podman-compose version
+```
+
+Then use `podman compose` in place of `docker compose` everywhere. The compose file needs no
+edits.
+
+Prefer **`podman compose`** over the older standalone **`podman-compose`** binary where both
+exist: `podman compose` delegates to a real Compose implementation. This project's compose
+file uses `depends_on: condition: service_healthy`, which `podman-compose` has supported
+inconsistently across versions — if the app container starts before MariaDB is ready and the
+installer cannot reach the database, that is the likely reason. Docker avoids the question
+entirely, which is why Fix A is the recommendation.
+
+If you stay on Podman, also read §10.3 on file ownership under rootless Podman.
+
 ### 10.1 "Permission denied" reading files, or the installer says folders are not writable
 
 This is **SELinux**, which is enforcing by default on Fedora. The bind mounts in
