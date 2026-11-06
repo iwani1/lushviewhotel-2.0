@@ -35,31 +35,48 @@ repository is **QloApps 1.8.0**, released 2026-11-06 08:53 UTC, and GitHub repor
 import is the stable release, not a moving dev branch. The repository name
 `lushviewhotel-2.0` is therefore literally the 1.7.0 → 1.8.0 migration.
 
-**The most urgent finding is security, and it is on the live site, not in this repo.**
-Every recent QloApps security fix is **absent from the v1.7.0 tag** that production runs —
-verified by commit ancestry, all four fix commits return `behind`. That includes
-**CVE-2025-67325, an unauthenticated unrestricted file upload leading to remote code
-execution**, and `qlohotelreview` (the module carrying it) ships in 1.7.0. All of these are
-patched in the 1.8.0 tree held here. Compounding it, `CHANGELOG.txt` and `composer.json` are
-publicly readable on the live site, which hands an attacker the exact version in one request.
+Two findings dominate everything else.
 
-The imported 1.8.0 tree itself is clean. Every QloApps CVE published in the last 12 months
+**1. The live production site is exposed.** Every recent QloApps security fix is **absent
+from the v1.7.0 tag** that production runs — verified by commit ancestry, all four fix
+commits return `behind`. That includes **CVE-2025-67325, an unauthenticated unrestricted
+file upload leading to remote code execution**, and `qlohotelreview` (the module carrying
+it) ships in 1.7.0. All are patched in the 1.8.0 tree held here. Compounding it,
+`CHANGELOG.txt` and `composer.json` are publicly readable on the live site, handing an
+attacker the exact version in one request (§2.2, §2.3).
+
+**2. This repository cannot upgrade the live site by itself.** The 1.8.0 tree contains **no
+1.7.0 → 1.8.0 database migration**. At least eight tables the new code depends on —
+`tax_configuration`, `tax_validity_range`, `tax_price_tier`, `tax_child_range`,
+`order_tax_detail`, `order_tax_exemption`, `business_source`, `source` — are absent from the
+1.7.0 schema and nothing in this tree creates them for an existing install. The bundled
+`install-dev/upgrade/` machinery is PrestaShop-era and keyed to `_PS_INSTALL_VERSION_` =
+`1.6.1.23`; `hotelreservationsystem` declares version `1.8.0` but ships no `upgrade-1.7.0.php`
+or `upgrade-1.8.0.php`, so the module version gets bumped in the database **with no migration
+run and no error raised**. The supported vehicle, the QloApps **1-Click Upgrade addon**
+(`qloautoupgrade`), is a stub in 1.7.0 and **removed entirely from 1.8.0** — it is fetched
+from QloApps' servers, not vendored here. **Copying these files over the live install would
+silently corrupt it** (§2.9).
+
+The imported 1.8.0 tree is otherwise clean: every QloApps CVE published in the last 12 months
 that I could locate is fixed in it, verified by reading the patched code rather than trusting
 version numbers.
 
-**The remaining work is localisation and content**, in rough order of effort:
+**The remaining work is migration strategy, then localisation and content:**
 
-1. **Confirm the host PHP version.** 1.8.0 needs PHP ≥8.2; the live manifest still declares
+1. **Choose the migration path** — in-place 1-Click Upgrade from the live 1.7.0 back office,
+   or a fresh 1.8.0 install plus data migration. Do **not** file-copy (§2.9).
+2. **Confirm the host PHP version.** 1.8.0 needs PHP ≥8.2; the live manifest still declares
    `>=5.4 <8.0`. If the host is below 8.2, nothing else can proceed (§2.7).
-2. **Decide in-place upgrade vs. fresh build** — different projects, different risk (§2.6).
-3. **No Ghana localisation pack, and no GHS currency anywhere in the codebase.** The country
-   row exists; the currency, region data and postal-code policy do not (§6).
-4. **One hard install blocker:** `composer.json` requires `ext-mcrypt`, removed from PHP core
-   in 7.2 and absent on every PHP version this release supports (§5).
-5. **Content defects on the live site** — a typo in the page title, `Dummy Image 1–12` alt
-   text across the gallery, and duplicated placeholder blocks. Cheap, high-visibility (§2.5).
-6. **Payment gateway — DEFERRED** at the client's direction. The gap is real and documented
-   (§6.2) but is off the critical path for the upgrade (§2.8).
+3. **Account for the `install/` → `install-dev/` and `admin/` → `admin-dev/` directory
+   rename** in any deploy script, `.htaccess` rule or cron entry (§2.9).
+4. **Ghana localisation** — now added to this branch as `localization/gh.xml` (GHS + Act 1151
+   tax rules). Still open: region data and the postal-code policy (§6).
+5. **Install blocker fixed on this branch:** `ext-mcrypt` removed from `composer.json` (§5).
+6. **Content defects on the live site** — page-title typo `Lush VIew`, `Dummy Image 1–12` alt
+   text across the gallery, duplicated placeholder blocks. Cheap, high-visibility (§2.5).
+7. **Payment gateway — DEFERRED** at the client's direction. The gap is real and documented
+   (§6.2) but off the critical path (§2.8).
 
 Branding is far cheaper than the raw string count suggests (see §7) — **do not** bulk-rename.
 
@@ -211,7 +228,7 @@ The 123 Google reviews are a real asset — worth wiring the `qlohotelreview` mo
   `qlochannelmanagerconnector` and replaced it with the combined `qlocmconnector`
   (CHANGELOG #1952). If the client uses a channel manager, this needs configuration and data
   migration, not just a file copy.
-- **Module count moved 59 → 61.** Diff the enabled-module list before and after.
+- **Module count moved 57 → 61 bundled.** Removed: `qloautoupgrade`, `qlochannelmanagerconnector`. Added: `qlocmconnector`, `qlocrontaskmanager`, `qloduitkupayment`, `qlogooglehotelconnector`, `qlohotelreports`, `qlositemap`. Diff the *enabled* module list in the live database before and after, not just the bundled set.
 - **Back up the database and all uploaded media** (`img/`, `modules/*/views/img/`,
   `upload/`, `download/`) before any upgrade attempt. The gallery and testimonial images
   above live under module paths that an upgrade may overwrite.
@@ -223,6 +240,80 @@ Payment gateway integration is **on hold** at the client's direction. The §6.2 
 M-Pesa) and remains the largest functional gap for a Ghanaian property — but it is not on the
 critical path for the 1.7.0 → 1.8.0 upgrade and is excluded from the action plan below until
 reinstated.
+
+### 2.9 Migration path — a file-copy upgrade will break the database
+
+**This is the single highest-risk finding in the audit.** The 1.8.0 tree in this repository
+**contains no 1.7.0 → 1.8.0 database migration**. Copying these files over the live
+installation would leave the database missing tables the new code requires, and the site
+would fail at runtime.
+
+**Evidence 1 — the schema moved, and nothing in the tree bridges it.**
+Comparing `install/data/db_structure.sql` at tag v1.7.0 against the 1.8.0 tree, at least
+eight tables that 1.8.0 code depends on are **absent from the 1.7.0 schema**:
+
+| New in 1.8.0 | Referenced by |
+|---|---|
+| `tax_configuration` | `classes/tax/TaxConfiguration.php`, `TaxCalculator.php` |
+| `tax_validity_range` | `classes/tax/TaxValidityRange.php` |
+| `tax_price_tier` | tourism tax rate tiers (#1760) |
+| `tax_child_range` | tourism tax child pricing (#1760) |
+| `order_tax_detail` | `classes/order/OrderTaxDetail.php`, `Cart.php`, `PaymentModule.php` |
+| `order_tax_exemption` | tourism tax exemptions (#1760) |
+| `business_source` / `business_source_lang` | Source & Business Source Management (#1782) |
+| `source` / `source_lang` | Source & Business Source Management (#1782) |
+
+These are exactly the tables behind 1.8.0's two headline features — the tourism tax system
+and source tracking. `TaxCalculator::getTaxesAmount()` calls
+`TaxConfiguration::getByTaxId()` and reads `Configuration::get('QLO_USE_TOURISM_TAX')`, so
+the code paths are live, not dormant. A 1.7.0 database has none of them.
+
+**Evidence 2 — the core upgrade machinery is PrestaShop-era and inert for this bump.**
+`install-dev/upgrade/sql/` contains only `1.4.1.sql`, `1.5.0.sql`, `1.5.1.0.sql`,
+`1.5.2.0.sql`, `1.6.0.0.sql`, `1.6.1.0.sql`. `upgrade.php:137` compares against
+`_PS_INSTALL_VERSION_` — hardcoded to **`1.6.1.23`** — not `_QLO_INSTALL_VERSION_`
+(`1.8.0.0`). So the built-in upgrader governs PrestaShop-lineage versions and has nothing to
+say about a QloApps 1.7.0 → 1.8.0 transition.
+
+**Evidence 3 — the module-level migration for the core hotel module is missing.**
+`hotelreservationsystem` declares `version = '1.8.0'` (was `1.7.0`), but its `upgrade/`
+directory tops out at `upgrade-1.6.0.php` — identical in both tags. There is no
+`upgrade-1.7.0.php` or `upgrade-1.8.0.php`. Per `classes/module/Module.php:626-663`,
+`loadUpgradeVersionList()` finds no applicable file and then simply calls
+`Module::upgradeModuleVersion()` and records `success = true`. **The module version number is
+bumped in the database with no schema migration executed** — the failure is silent, which is
+worse than an error.
+
+**Evidence 4 — the 1-Click Upgrade module is not in this tree.**
+`qloautoupgrade` is a two-file stub in v1.7.0 (`CHANGELOG.txt`, `qloautoupgrade.php`) and is
+**absent entirely from v1.8.0**. The 1.8.0 CHANGELOG records `#1345: Removed Autoupgrade
+module from the QloApps core` (under V1.7.0) and `#370: Added Autoupgrade addon`. Core code
+still probes for it — `classes/Tools.php:3456` reports
+`Module::isInstalled('qloautoupgrade') && Module::isEnabled('qloautoupgrade')` to the
+version-check feed, and `classes/Upgrader.php:128-131` reads `autoupgrade_module_link` from
+QloApps' RSS feed.
+
+**Conclusion:** the supported upgrade vehicle is the **separately-distributed QloApps 1-Click
+Upgrade addon**, fetched from QloApps' servers and run from the *existing* 1.7.0 back office.
+It is not in this repository and I could not inspect it, so **its exact behaviour is
+unverified**. Two viable paths:
+
+- **(A) In-place 1-Click Upgrade.** Install/enable the autoupgrade addon on the live 1.7.0
+  site and let it pull 1.8.0 and run the real migrations. Preserves bookings, customers and
+  history. Requires the addon and a full backup first.
+- **(B) Fresh 1.8.0 install + data migration.** Install this tree clean (it will create the
+  full 1.8.0 schema), then export/import hotels, room types, customers and bookings. More
+  control, more work, and the export/import surface must be validated — 1.7.0 CSV samples
+  keyed on product id were changed to room type id in 1.7.0 (#1344), so format compatibility
+  needs checking.
+
+Also note the **directory rename between versions**: v1.7.0 uses `install/` and `admin/`;
+1.8.0 uses `install-dev/` and `admin-dev/`. Any deployment script, CI job, `.htaccess` rule,
+cron entry or `settings.inc.php` path referencing the old names must be updated. This alone
+breaks naive rsync-based deploys.
+
+Scale of the delta: **1,620 commits** between v1.7.0 and v1.8.0. The compare API reports 300
+changed files, which is its response cap — the true figure is higher.
 
 ---
 
@@ -443,56 +534,72 @@ Revised after the live-site discovery (§2). Payment gateway work is **deferred*
 client's direction (§2.8) and is listed separately at the end so it can be reinstated without
 re-planning.
 
+Items marked **DONE** are already committed on this branch.
+
 ### P0 — production is exposed; act before any feature work
 
-1. **Disable the `qlohotelreview` module on the live 1.7.0 site.** It carries
+1. **Do NOT file-copy this tree over the live install.** There is no 1.7.0 → 1.8.0 database
+   migration in it, and the module version bumps silently with no schema change and no error
+   (§2.9). This is the fastest way to take the booking engine down.
+2. **Disable the `qlohotelreview` module on the live 1.7.0 site.** It carries
    CVE-2025-67325 (unauthenticated file upload → RCE) and the fix is absent from v1.7.0
    (§2.2). Re-enable after the upgrade.
-2. **Block public access to `CHANGELOG.txt` and `composer.json`** on the live site (§2.3).
+3. **Block public access to `CHANGELOG.txt` and `composer.json`** on the live site (§2.3).
    Also `README.md`, `AGENTS.md`, `LICENSE.md`. Five-minute change; stops version disclosure.
-3. **Add a WAF rule on `bo_query`** and drop `FILE`/`DROP`/cross-database rights from the
+4. **Add a WAF rule on `bo_query`** and drop `FILE`/`DROP`/cross-database rights from the
    MySQL user (§2.2) — mitigates CVE-2026-75497/75498 until the upgrade lands.
-4. **Confirm the host PHP version.** 1.8.0 requires **≥8.2**; the live manifest declares
+5. **Confirm the host PHP version.** 1.8.0 requires **≥8.2**; the live manifest declares
    `>=5.4 <8.0` (§2.7). If the host is below 8.2, upgrade PHP first — this gates everything.
-5. **Back up the live database and all uploaded media** (`img/`, `modules/*/views/img/`,
-   `upload/`, `download/`) before touching anything (§2.7).
+6. **Back up the live database and all uploaded media** (`img/`, `modules/*/views/img/`,
+   `upload/`, `download/`) before touching anything (§2.7). Media under module paths can be
+   overwritten by an upgrade.
 
 ### P1 — the upgrade itself
 
-6. **Decide in-place upgrade vs. fresh 1.8.0 build + data migration** (§2.6). Blocking
-   decision; the two paths diverge from here.
-7. **Remove `ext-mcrypt` from `composer.json`** (§5). One-line fix; unblocks
-   `composer install` on any supported PHP.
-8. **Diff the enabled-module list, 59 → 61**, and specifically plan the
-   `qlochannelmanagerconnector` → `qlocmconnector` swap if a channel manager is in use
-   (§2.7).
-9. **Create GHS currency and a `localization/gh.xml` pack** (§6.2). GHS appears nowhere in
-   the tree; there is no currency seed file.
-10. **Decide the Ghana postal-code policy** and set `zip_code_format` / `need_zip_code`
+7. **Choose the migration path** (§2.9). Either (A) run the QloApps **1-Click Upgrade addon**
+   from the *existing* 1.7.0 back office — the only supported vehicle, and not vendored in
+   this repo — or (B) fresh 1.8.0 install plus export/import of hotels, room types, customers
+   and bookings. Blocking decision; everything below depends on it.
+8. **Account for the directory rename** `install/` → `install-dev/` and `admin/` →
+   `admin-dev/` between 1.7.0 and 1.8.0 (§2.9). Update deploy scripts, `.htaccess` rules,
+   cron entries and any hardcoded `_PS_ADMIN_DIR_` paths.
+9. **Plan the module delta, 57 → 61 bundled** (§2.9). Removed: `qloautoupgrade`,
+   `qlochannelmanagerconnector`. Added: `qlocmconnector`, `qlocrontaskmanager`,
+   `qloduitkupayment`, `qlogooglehotelconnector`, `qlohotelreports`, `qlositemap`. The
+   channel-manager swap is breaking and needs config/data migration if in use (§2.7).
+10. **DONE — remove `ext-mcrypt` from `composer.json`** (§5). Committed `f1f0749`; unblocks
+    `composer install` on any supported PHP.
+11. **DONE — create GHS currency and `localization/gh.xml`** (§6.2). Committed `c25596c` with
+    Act 1151 tax rules (VAT 15% + NHIL 2.5% + GETFund 2.5% = 20%, `behavior="1"` combine, not
+    compound). **Rates still need sign-off from the client's accountant.**
+12. **Decide the Ghana postal-code policy** and set `zip_code_format` / `need_zip_code`
     (§6.2). The current `""` + `need_zip_code="1"` combination risks rejecting guests at
-    checkout.
-11. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
-12. **Configure the tourism-tax system** for Ghana's levy — new in 1.8.0 (#1760) (§6.1).
+    checkout. GhanaPostGPS is not a classic postal code.
+13. **Set timezone `Africa/Accra`, country Ghana**, shop name and shop email (§6, §7).
+14. **Configure the tourism-tax system** for Ghana's 1% GTA Tourism Development Levy via
+    `QLO_USE_TOURISM_TAX` + `TaxConfiguration` — new in 1.8.0 (#1760). Prefer this over the
+    flat-rate group in `gh.xml` (§6.1, §6.3). Note these tables are among those missing from
+    a 1.7.0 database (§2.9).
 
 ### P2 — launch hardening and content
 
-13. Rename `admin-dev/`; delete `install-dev/`; verify the generated root `.htaccess` (§4.3).
-14. Swap the **6 logo assets** and edit the **2 guest-facing template lines** (§7).
-15. Fix the live-site content defects (§2.5): page-title typo `Lush VIew`, `Dummy Image 1–12`
+15. Rename `admin-dev/`; delete `install-dev/`; verify the generated root `.htaccess` (§4.3).
+16. Swap the **6 logo assets** and edit the **2 guest-facing template lines** (§7).
+17. Fix the live-site content defects (§2.5): page-title typo `Lush VIew`, `Dummy Image 1–12`
     alt text, duplicated Luxurious Rooms / Restaurants / Swimming Pool blocks, truncated copy,
     domain name inside the address field, `2010` copyright start.
-16. Resolve the **`.com` vs `.net` domain question** and the Tema/Ashaiman address conflict
+18. Resolve the **`.com` vs `.net` domain question** and the Tema/Ashaiman address conflict
     (§2.6) — canonical data must be settled before content is migrated.
-17. Inventory room types, rates, availability and existing bookings from the back office or
+19. Inventory room types, rates, availability and existing bookings from the back office or
     database; the public site does not expose them (§2.6).
 
 ### P3 — durability
 
-18. Add `|escape` to `search_form.tpl:85` for defence in depth (§4.2).
-19. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§8).
-20. Write tests around the booking and payment flows before customising (§8).
-21. Decide the Ghana regions question (`contains_states` flag + `state.xml` rows) (§6.2).
-22. Legal read on OSL-3.0 obligations, especially the attribution footer (§3, §7).
+20. **DONE — add `|escape` to `search_form.tpl:85`** for defence in depth (§4.2). Committed `3587135`; removes the single-point-of-failure dependency on `AdminController.php:2267` pre-sanitising the value.
+21. Stand up GitHub Actions CI with a syntax-lint + install smoke test (§8).
+22. Write tests around the booking and payment flows before customising (§8).
+23. Decide the Ghana regions question (`contains_states` flag + `state.xml` rows) (§6.2).
+24. Legal read on OSL-3.0 obligations, especially the attribution footer (§3, §7).
 
 ### Deferred — payment gateway (reinstated on request)
 
