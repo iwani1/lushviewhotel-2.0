@@ -460,6 +460,37 @@ This is where the real project work lives.
 5. Configure the tourism-tax system for Ghana's levy rates at hotel level.
 6. Set `Africa/Accra` timezone and Ghana as the default country during install.
 
+### 6.4 Upstream defects surfaced by the new CI check
+
+The localization validator added in `.github/workflows/ci.yml` found **37 genuine defects in
+QloApps' own shipped packs**. None affect Ghana, and all are baselined so CI is green, but
+they are worth reporting upstream because each one causes **silent data loss on import** —
+`classes/LocalizationPack.php` hits `continue` and the pack imports "successfully" while
+quietly dropping rows.
+
+**`localization/cz.xml` — 29 dropped tax rules.** The group `CZ Snížená sazba (12%)` points
+all 29 of its `taxRule` entries at `id_tax="32"`, but the pack only declares ids **1–30**.
+`id=2` is `DPH CZ 12%` — the only 12% Czech rate — so `32` looks like a renumbering slip.
+Effect at `LocalizationPack.php:238-240`: the group imports **completely empty**, so a Czech
+merchant selecting the reduced rate gets **no tax applied at all**.
+
+**`localization/hr.xml` and `localization/se.xml` — 8 dropped tax rules.** Both target
+`iso_code_country="uk"`, but `install-dev/data/xml/country.xml` seeds the United Kingdom as
+**`GB`** (correct ISO 3166-1 alpha-2). `Country::getByIso('UK')` returns 0, so
+`LocalizationPack.php:234-235` drops the rules. No other pack uses `"uk"`, which suggests
+these two were missed when the seed data standardised on `GB` — most likely a post-Brexit
+cleanup that didn't reach every file.
+
+Neither is fixed here: both are out of scope for Lush View Hotel, and editing unrelated
+country packs would create merge friction on the next upstream sync. They are recorded in the
+workflow's `KNOWN_UPSTREAM` baseline, which fails CI if the list ever needs to grow.
+
+**Relevance to this project:** the same two failure modes apply directly to `gh.xml`. A
+typo'd `iso_code_country` or a dangling `id_tax` would silently produce a Ghana pack with no
+working tax rules — and the site would appear to import fine. `gh.xml` was written against
+this contract and is verified by CI: `iso_code_country="gh"` resolves against the seed data,
+and all five tax ids resolve within the pack.
+
 ---
 
 ## 7. Branding surface area — smaller than the raw numbers suggest
