@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!--
+  Ghana localization pack for Lush View Hotel (lushviewhotel.net).
+
+  Built for QloApps 1.8.0. Schema mirrors localization/ng.xml and
+  localization/ke.xml; parsing is handled by classes/LocalizationPack.php.
+
+  TAX RATES — CONFIRM WITH THE CLIENT'S ACCOUNTANT BEFORE GO-LIVE.
+  Figures reflect the Value Added Tax Act, 2025 (Act 1151) and the
+  COVID-19 Health Recovery Levy Repeal Act, 2025, both effective
+  1 January 2026:
+    - VAT                15%
+    - NHIL                2.5%
+    - GETFund Levy        2.5%
+    - Combined           20% on the same taxable value
+
+  The pre-2026 regime cascaded NHIL and GETFund into the VAT base
+  (21.9% effective). Act 1151 decoupled them: all three now apply to the
+  SAME taxable value, so tax rules below use behavior="1"
+  (TaxCalculator::COMBINE_METHOD - sum) and NOT behavior="2"
+  (ONE_AFTER_ANOTHER_METHOD - compound). Using behavior="2" here would
+  reproduce the abolished cascading calculation and overcharge guests.
+
+  The 1% Ghana Tourism Authority Tourism Development Levy is defined
+  separately (id 83) rather than folded into the standard group, because
+  QloApps 1.8.0 has a dedicated tourism-tax subsystem (per-night /
+  per-person rate tiers, child pricing, exemptions, at-hotel collection)
+  driven by Configuration QLO_USE_TOURISM_TAX and TaxConfiguration.
+  Prefer that subsystem over attaching the levy as a flat percentage.
+
+  Tax ids 79-83 are unused by every other shipped pack (existing packs
+  occupy 1-54, 60-62, 72, 73, 76, 78).
+-->
+<localizationPack name="Ghana">
+  <currencies>
+    <currency name="Ghanaian cedi" iso_code="GHS" iso_code_num="936" sign="&#x20B5;" blank="1" format="1" decimals="2"/>
+  </currencies>
+  <languages>
+    <language iso_code="en"/>
+  </languages>
+  <taxes>
+    <!-- Statutory rates: VAT + NHIL + GETFund, all on the same taxable value -->
+    <taxRulesGroup name="Ghana Standard Rate 20%">
+      <taxRule iso_code_country="gh" behavior="1" id_tax="79"/>
+      <taxRule iso_code_country="gh" behavior="1" id_tax="80"/>
+      <taxRule iso_code_country="gh" behavior="1" id_tax="81"/>
+    </taxRulesGroup>
+
+    <!-- Zero-rated / exempt supplies -->
+    <taxRulesGroup name="Ghana Zero Rate 0%">
+      <taxRule iso_code_country="gh" behavior="0" id_tax="82"/>
+    </taxRulesGroup>
+
+    <!--
+      Optional combined group for properties that must collect the GTA
+      Tourism Development Levy through the booking itself rather than at
+      the hotel. Only attach this to room types if the client confirms the
+      levy is collected pre-arrival; otherwise use "Ghana Standard Rate
+      20%" and configure the levy through the tourism-tax subsystem.
+    -->
+    <taxRulesGroup name="Ghana Standard Rate 20% + Tourism Levy 1%">
+      <taxRule iso_code_country="gh" behavior="1" id_tax="79"/>
+      <taxRule iso_code_country="gh" behavior="1" id_tax="80"/>
+      <taxRule iso_code_country="gh" behavior="1" id_tax="81"/>
+      <taxRule iso_code_country="gh" behavior="1" id_tax="83"/>
+    </taxRulesGroup>
+
+    <tax id="79" name="Ghana VAT 15%" rate="15.000"/>
+    <tax id="80" name="Ghana NHIL 2.5%" rate="2.500"/>
+    <tax id="81" name="Ghana GETFund Levy 2.5%" rate="2.500"/>
+    <tax id="82" name="Ghana Zero Rate 0%" rate="0.000"/>
+    <tax id="83" name="Ghana Tourism Development Levy 1%" rate="1.000"/>
+  </taxes>
+  <units>
+    <unit type="weight" value="kg"/>
+    <unit type="volume" value="L"/>
+    <unit type="short_distance" value="cm"/>
+    <unit type="base_distance" value="m"/>
+    <unit type="long_distance" value="km"/>
+  </units>
+</localizationPack>
