@@ -256,3 +256,15 @@ admin/themes/default/css/screen.css
 
 **sitemap.xml
 robots.txt
+# Database dumps and data exports - never commit production data
+*.sql
+!install-dev/data/*.sql
+!install-dev/upgrade/sql/*.sql
+!install-dev/data/db_structure.sql
+!install-dev/data/theme.sql
+*.sql.gz
+*.sql.bz2
+*.sql.zip
+*.sqlite
+*.sqlite3
+*.db
