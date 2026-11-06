@@ -1,0 +1,455 @@
+# 05 — Running the Application on Your Own Computer (Fedora + Docker)
+
+This gets QloApps running locally on your Fedora machine, in a container that matches
+production versions exactly: **PHP 8.4** (live server runs 8.4.27) and **MariaDB 11.4**
+(live server runs 11.4.13). Matching versions matters — behaviour differences between
+MariaDB 10.4 (what most desktop bundles ship) and 11.4 are exactly the kind of thing that
+makes a bug appear locally but not in production, or vice versa.
+
+Nothing here touches the live hotel system. The containers talk only to each other and to
+`localhost` on your machine.
+
+---
+
+## 1. What you will end up with
+
+| Thing | Value |
+| --- | --- |
+| Storefront | http://localhost:8080 |
+| Back office (admin) | http://localhost:8080/admin-dev/ |
+| PHP | 8.4 with `gd, pdo_mysql, soap, zip, curl, openssl, simplexml, dom, phar` (+ `exif`, `mbstring`, `opcache`) |
+| Database server | MariaDB 11.4, reachable from your machine on `127.0.0.1:3307` |
+| Database A — `qloapps_fresh` | clean install, sample data, safe to break and rebuild |
+| Database B — `qloapps_live` | your real production data, imported read-mostly |
+| Table prefix | `qlo_` — identical to production |
+
+Two databases on purpose. You asked for a clean install first and your real data second, and
+keeping them side by side means you can always compare "what the code does with no data"
+against "what it does with 1,934 real bookings". Switching between them is one command (§7).
+
+---
+
+## 2. Before you start — install Docker on Fedora
+
+Fedora ships **Podman**, not Docker. Both work with these files; Docker is the smoother path
+because of how it maps file ownership (see §10.3). To install Docker:
+
+```bash
+sudo dnf -y remove docker-client docker-client-latest docker-common \
+                   docker-latest docker-engine podman-docker
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+Then **log out and back in** (the group membership only takes effect in a new session) and
+verify:
+
+```bash
+docker --version
+docker compose version
+docker run --rm hello-world
+```
+
+If you would rather use Podman, skip all of the above and substitute `podman` for `docker`
+and `podman compose` for `docker compose` in every command below. The compose file needs no
+changes.
+
+---
+
+## 3. Step 1 — get the code
+
+```bash
+cd ~
+git clone -b arena/07df51c3-lushviewhotel-2-0 \
+    https://github.com/iwani1/lushviewhotel-2.0.git
+cd lushviewhotel-2.0
+```
+
+That branch holds the QloApps 1.8.0 source tree plus all the project documentation and the
+local development tooling described here. Confirm the tooling arrived:
+
+```bash
+ls docker-compose.yml dev/docker/ dev/scripts/ dev/migrations/
+```
+
+You should see `Dockerfile`, `php.ini`, `entrypoint.sh` under `dev/docker/`; `use-db.sh`,
+`import-live-dump.sh`, `set-admin-password.php` under `dev/scripts/`; and the migration pair
+under `dev/migrations/`.
+
+---
+
+## 4. Step 2 — build and start
+
+```bash
+docker compose up -d --build
+```
+
+The first build downloads PHP 8.4, MariaDB 11.4 and compiles four PHP extensions — expect
+several minutes. Subsequent starts are seconds.
+
+Watch it come up:
+
+```bash
+docker compose ps
+docker compose logs -f app        # Ctrl-C to stop following
+```
+
+Wait until `qlo-db` reports `healthy`. The app container is configured to wait for that
+before starting, so if `docker compose ps` shows both as running, the database is ready.
+
+---
+
+## 5. Step 3 — install (recommended: one command)
+
+QloApps ships a command-line installer, which is more reliable than the web wizard because
+every setting is explicit and repeatable. **Copy your existing `config/settings.inc.php`
+nowhere — there isn't one yet; the installer creates it.**
+
+```bash
+docker compose exec app php install-dev/index_cli.php \
+  --step=all \
+  --language=en \
+  --timezone=Africa/Accra \
+  --domain=localhost:8080 \
+  --base_uri=/ \
+  --db_server=db \
+  --db_user=qlo \
+  --db_password=qlo_dev_only \
+  --db_name=qloapps_fresh \
+  --db_clear=0 \
+  --db_create=0 \
+  --prefix=qlo_ \
+  --engine=InnoDB \
+  --name="Lush View Hotel" \
+  --country=gh \
+  --firstname=Admin \
+  --lastname=LushView \
+  --password='ChangeMe-Local-123' \
+  --email=dev@localhost.test \
+  --newsletter=0 \
+  --license=1
+```
+
+Expect `-- Installation successfull! --` (the misspelling is upstream's).
+
+### Why each flag is set that way
+
+Every flag below was checked against `install-dev/classes/datas.php`, which defines the
+complete argument list and its defaults.
+
+| Flag | Why |
+| --- | --- |
+| `--db_server=db` | Inside the compose network the database host is the service name `db`. **`localhost` will not work** — that is the single most common failure. |
+| `--db_clear=0` | The default is **`1`, which means "drop existing tables"**. Set to `0` so a typo can never destroy data. Keep it at 0 always. |
+| `--db_create=0` | Compose already created `qloapps_fresh` via `MARIADB_DATABASE`. |
+| `--prefix=qlo_` | Matches production exactly, so SQL you write locally runs unchanged against the live data later. |
+| `--timezone=Africa/Accra` | The default is `Europe/Paris`. Production is already `Africa/Accra`; local should match or every date you test is shifted. |
+| `--domain=localhost:8080` | The port is required. `controllerConsole.php:106` puts this value into `$_SERVER['HTTP_HOST']`, and `install.php:481-482` stores it as `PS_SHOP_DOMAIN`. `Tools::getHttpHost()` keeps the port, so generated URLs point back at 8080. Omit it and every link in the app points at port 80. |
+| `--country=gh` | `Country::getByIso()` uppercases its input (`classes/Country.php:172`), so `gh` matches the seed row `iso_code="GH"`, `call_prefix="233"`. This also loads the **Ghana localization pack** — `install.php:417` first tries `api.qloapps.com`, and when that fails it falls back to `localization/gh.xml` (`install.php:422-425`), which is the pack written for this project: GHS plus the Act 1151 taxes (VAT 15%, NHIL 2.5%, GETFund 2.5%) combined additively, not compounded. Installing locally is how you verify that pack. |
+| `--newsletter=0` | Default is `1`, which subscribes `dev@localhost.test` to QloApps marketing. |
+| `--license=1` | Accepts the OSL 3.0 licence; without it the CLI installer stops and asks. |
+
+### Alternative: the web installer
+
+If you prefer clicking, open **http://localhost:8080/install-dev/** and work through the
+wizard. Use exactly the same values as the table above — particularly `db` as the server
+name, `qlo_` as the prefix, and `localhost:8080` as the domain.
+
+The requirements screen should be entirely green. It checks PHP 8.2–8.5, the seven required
+extensions, `memory_limit ≥ 128M`, `max_execution_time ≥ 500`, `upload_max_filesize ≥ 16M`,
+`allow_url_fopen = On`, and recursive write permission on twelve directories
+(`install-dev/controllers/http/system.php`). `dev/docker/php.ini` exceeds every numeric
+minimum and `dev/docker/entrypoint.sh` fixes ownership on all twelve paths, so nothing
+should fail. If something does, see §10.
+
+---
+
+## 6. Step 4 — log in and check it works
+
+Back office: **http://localhost:8080/admin-dev/**
+Email: `dev@localhost.test`  Password: `ChangeMe-Local-123`
+
+Storefront: **http://localhost:8080**
+
+Run through this checklist — it confirms the things the project depends on:
+
+1. **Back office loads** and shows the QloApps dashboard.
+2. **Preferences → General** shows shop name `Lush View Hotel`.
+3. **Localization → Localization** shows country **Ghana**, currency **GHS (₵)**,
+   timezone **Africa/Accra**.
+4. **Localization → Taxes** shows the five Ghana tax rules from `localization/gh.xml`.
+5. **Modules** lists the hotel modules, including `hotelreservationsystem`.
+6. Create a **room type** and a **room**, then make a test booking end to end:
+   book → confirm → pay → check in → check out. This is the first of the four workflows the
+   project brief requires you to verify (§10 of the brief).
+
+---
+
+## 7. Step 5 — load your real production data
+
+Only do this once the fresh install works. Real data on a laptop is a data-protection
+responsibility under Ghana's Data Protection Act 2012 (Act 843): 1,257 guest records and
+2,058 payment rows. Keep the machine encrypted and never commit the dump.
+
+### 7.1 Get the dump onto your machine
+
+Export it fresh from cPanel → phpMyAdmin → `lushview_qloapp` → **Export** → **Custom** →
+select all tables → format **SQL** → go. Save it somewhere **outside** the repository, for
+example `~/backups/live_db.sql`.
+
+Exporting fresh is better than reusing an old copy, and you should keep this export as your
+own offline backup regardless of what happens with the GitHub repository.
+
+Verify it is the same shape as the one this project analysed:
+
+```bash
+grep -c '^CREATE TABLE' ~/backups/live_db.sql     # expect 300
+sha256sum ~/backups/live_db.sql                   # an old copy of the dump we analysed was
+                                                  # 5fc7f3ffaf53fe2682f17de52c287047acc3f37e7c568ab5e0dff1f36e299edd
+```
+
+A different hash just means the live database has changed since — that is expected and fine.
+
+### 7.2 Import it
+
+```bash
+dev/scripts/import-live-dump.sh ~/backups/live_db.sql
+```
+
+The script validates the file before writing anything, then creates `qloapps_live`,
+imports into it, and applies migration 001 (§9). It is hardcoded to `qloapps_live` and to
+the local `db` service — it has no host parameter, so it **cannot** be aimed at production.
+`qloapps_fresh` is never touched.
+
+### 7.3 Switch the app to the real data
+
+```bash
+dev/scripts/use-db.sh live
+```
+
+Switch back at any time with `dev/scripts/use-db.sh fresh`. Run it with no argument to see
+which one is active. The script rewrites `_DB_NAME_` in `config/settings.inc.php` and clears
+`cache/class_index.php` plus the compiled Smarty templates — clearing is not optional,
+because stale cache makes the switch look like it did nothing.
+
+---
+
+## 8. Everyday commands
+
+```bash
+docker compose up -d                # start
+docker compose stop                 # stop, keep everything
+docker compose down                 # remove containers, KEEP the database
+docker compose down -v              # remove containers AND DELETE all data
+docker compose logs -f app          # Apache + PHP errors
+docker compose logs -f db           # MariaDB
+docker compose restart app          # after changing php.ini or the Dockerfile
+docker compose exec app bash        # a shell inside the container
+docker compose exec db mariadb -uqlo -pqlo_dev_only qloapps_fresh   # SQL prompt
+```
+
+Your code edits are live immediately — the repository is bind-mounted, so saving a file on
+your machine changes what the container serves. Two exceptions:
+
+- **PHP changes** are picked up on the next request (opcache is set to revalidate every
+  request in `dev/docker/php.ini`).
+- **Template (`.tpl`) changes** need the Smarty cache cleared:
+  ```bash
+  docker compose exec app bash -c 'rm -rf cache/smarty/compile/* cache/smarty/cache/*'
+  ```
+- **Adding a class or an override** needs the class index rebuilt:
+  ```bash
+  docker compose exec app rm -f cache/class_index.php
+  ```
+
+To connect a database GUI (DBeaver, DataGrip) from your host: host `127.0.0.1`, port `3307`,
+user `qlo`, password `qlo_dev_only`.
+
+---
+
+## 9. The password problem — read this before you try to log in to real data
+
+**You cannot log in with your real staff passwords on the imported data.** This is not a bug
+and not something you did wrong.
+
+QloApps' legacy password scheme is `md5(_COOKIE_KEY_ . $password)`. `_COOKIE_KEY_` is a
+random per-installation salt stored in `config/settings.inc.php` on the live server. That
+file was never exported (it is excluded from the repository and from database dumps), and
+your local install generated a **different** random key. The imported hashes are therefore
+salted with a key nobody has. They are intact, just unverifiable here.
+
+Fix it by setting a password you know:
+
+```bash
+# see which staff accounts exist in the imported data
+docker compose exec app php dev/scripts/set-admin-password.php --list
+
+# set a known password for one of them
+docker compose exec app php dev/scripts/set-admin-password.php someone@lushviewhotel.net 'LocalDev-2026!'
+```
+
+The script reads your local credentials and cookie key from `config/settings.inc.php`, checks
+the **actual width** of the `passwd` column before choosing a scheme, writes the hash, then
+reads it back and verifies it. It refuses to run unless the database host is local.
+
+Add `--customer` to reset a storefront customer account instead of a staff account.
+
+### Why migration 001 is applied during import
+
+`import-live-dump.sh` applies `dev/migrations/001_widen_password_columns.up.sql`
+automatically. This is the first real finding of the local setup work, and it is a **blocker
+for the eventual upgrade**, not just a local convenience:
+
+- The live 1.7.0 schema stores `qlo_employee.passwd` and `qlo_customer.passwd` as
+  **`varchar(32)`** — exactly an MD5 digest.
+- QloApps 1.8.0 hashes with **bcrypt as its primary method**
+  (`classes/PasswordHashing.php`, `password_hash($passwd, PASSWORD_BCRYPT)`), and a bcrypt
+  digest is **60 characters**. That is why 1.8.0's own install schema declares
+  `passwd varchar(60)` (`install-dev/data/db_structure.sql:605` and `:791`).
+- On every successful login, 1.8.0 re-hashes and writes the new value back
+  (`classes/Employee.php:303-305`, `classes/Customer.php:413-415`).
+- **Nothing in this repository widens the column.** `install-dev/upgrade/sql/` stops at
+  `1.6.1.0.sql` and `modules/hotelreservationsystem/upgrade/` stops at `upgrade-1.6.0.php`,
+  so there is no 1.7.0 → 1.8.0 migration at all.
+
+Writing 60 characters into a `varchar(32)` column fails. How it fails depends on `sql_mode`:
+
+| Server mode | What happens |
+| --- | --- |
+| **STRICT** (MariaDB's default since 10.2) | The UPDATE is rejected with error 1406. Because `classes/db/DbPDO.php:69` builds the PDO handle **without `PDO::ATTR_ERRMODE`**, the error is silent — login still works, but the password stays MD5 and the automatic upgrade to bcrypt **never happens**. |
+| **NON-STRICT** | The value is **truncated to 32 characters**. It still looks like bcrypt, so `isPrimaryHash()` believes the account is already migrated, but `password_verify()` can never match it. The account is **permanently locked out** and the original MD5 hash is destroyed. |
+
+So: widen the columns **before** 1.8.0 code touches the data. Widening is non-destructive —
+every existing 32-character MD5 hash still fits in `varchar(60)` and stays valid, because
+`PasswordHashing::validateHash()` tries every supported method and re-hashes on next login.
+
+> **Correction to earlier project documentation.** `docs/audit/full-application-audit.md` §5
+> and `TASKS.md` row A20 stated that the 1.8.0 upgrade migrates passwords to bcrypt
+> automatically as each user logs in, needing no script. That is **only true once the columns
+> are widened.** Against the live schema as it stands today the re-hash silently fails (or
+> truncates). Both documents have been corrected.
+
+---
+
+## 10. Troubleshooting
+
+### 10.1 "Permission denied" reading files, or the installer says folders are not writable
+
+This is **SELinux**, which is enforcing by default on Fedora. The bind mounts in
+`docker-compose.yml` carry a `:z` suffix, which relabels them so the container can read
+them. If you have edited the compose file and removed those, put them back.
+
+To confirm SELinux is the cause:
+
+```bash
+sudo ausearch -m avc -ts recent | grep docker
+getenforce                     # "Enforcing" means SELinux is active
+```
+
+A temporary test (re-enable afterwards) is `sudo setenforce 0`. If that fixes it, the `:z`
+labels are missing or the entrypoint did not run.
+
+File ownership is fixed at container start by `dev/docker/entrypoint.sh`, which `chown`s the
+twelve directories the installer checks. If you added a new directory that needs writing,
+add it to `WRITABLE_DIRS` in that file.
+
+### 10.2 The installer cannot connect to the database
+
+Almost always `--db_server=localhost`. Inside the container, `localhost` is the container
+itself. It must be **`db`**. Test connectivity:
+
+```bash
+docker compose exec app bash -c 'mariadb -h db -uqlo -pqlo_dev_only -e "SHOW DATABASES;"'
+```
+
+You should see `qloapps_fresh`. If that fails, the db container is not healthy — check
+`docker compose logs db`.
+
+### 10.3 Files created by the container are owned by the wrong user
+
+With **Docker**, files the container writes (caches, generated images,
+`config/settings.inc.php`) appear on your machine owned by uid 33 (`www-data`). Your own
+files stay yours, so this is usually harmless. To reclaim everything if it becomes annoying:
+
+```bash
+sudo chown -R $UID:$UID .
+git config --global --add safe.directory "$PWD"
+```
+
+With **rootless Podman** the uid mapping is different and container root maps to your own
+user, so this problem generally does not arise — one reason Podman is pleasant on Fedora.
+The trade-off is that `:z` relabelling and volume paths behave slightly differently; if you
+hit odd permission errors under Podman, try Docker before debugging further.
+
+### 10.4 Port 8080 or 3307 already in use
+
+```bash
+ss -ltnp | grep -E ':8080|:3307'
+```
+
+Change the left-hand side of the port mappings in `docker-compose.yml`
+(`"127.0.0.1:8081:80"`), then re-run the install with `--domain=localhost:8081`.
+
+### 10.5 Starting over completely
+
+```bash
+docker compose down -v          # deletes BOTH databases
+rm -f config/settings.inc.php .htaccess
+git status                      # confirm nothing else was generated that you want to keep
+docker compose up -d --build
+```
+
+Then re-run the install command from §5.
+
+### 10.6 Friendly URLs give 404s
+
+The root `.htaccess` is generated by the installer and requires Apache's `AllowOverride All`,
+which `dev/docker/Dockerfile` sets (the stock PHP image leaves it at `None`, which silently
+breaks rewriting). If URLs still 404, regenerate them from the back office:
+**Preferences → SEO & URLs → "Set up rewrite URLs"**, save.
+
+---
+
+## 11. Safety rules for local development
+
+These come from §9 of the project brief and are not negotiable:
+
+1. **Never point local tooling at the live server.** `import-live-dump.sh` and
+   `set-admin-password.php` both refuse a non-local database host on purpose. Do not work
+   around that.
+2. **Never use the live database credentials locally**, and never put them in
+   `docker-compose.yml`. The credentials in that file are throwaway values for a container
+   that is not reachable from your network (both ports bind to `127.0.0.1`).
+3. **Never commit the dump.** Root `.gitignore` ignores `*.sql`; the only exception is the
+   structure-only reference in `docs/project/`, which provably contains no rows.
+4. **Staging must not send real guest email.** After importing live data, go to
+   **Preferences → Email** and set the "never send emails" option, and to
+   **Preferences → Orders** and disable any payment gateway. The live configuration has
+   `PS_MAIL_METHOD = 1` (SMTP). If you import it and the mail settings still point at real
+   infrastructure, a local test booking can email a real guest. **Check this before your
+   first test booking on imported data.**
+5. **Take a fresh export before any migration experiment** (§7.1), so you can always
+   re-import from a known state.
+
+---
+
+## 12. Files added for this environment
+
+| Path | Purpose |
+| --- | --- |
+| `docker-compose.yml` | MariaDB 11.4 + PHP 8.4/Apache, SELinux-labelled mounts, loopback-only ports |
+| `dev/docker/Dockerfile` | builds the required PHP extensions, enables `mod_rewrite`, sets `AllowOverride All` |
+| `dev/docker/php.ini` | exceeds every installer minimum; timezone `Africa/Accra`; opcache revalidating |
+| `dev/docker/entrypoint.sh` | fixes ownership on the twelve directories the installer requires to be writable |
+| `dev/docker/initdb/README.md` | optional first-run SQL drop point (left empty) |
+| `dev/scripts/use-db.sh` | switch between `qloapps_fresh` and `qloapps_live`, clearing caches |
+| `dev/scripts/import-live-dump.sh` | validated, production-incapable import of the live dump |
+| `dev/scripts/set-admin-password.php` | set a usable local password; picks bcrypt or MD5 from the real column width |
+| `dev/migrations/001_widen_password_columns.up.sql` | widen `passwd` to `varchar(60)` so bcrypt fits |
+| `dev/migrations/001_widen_password_columns.down.sql` | rollback, with a pre-flight check that refuses to truncate live bcrypt hashes |
+
+`dev/` is now included in the CI PHP syntax check (`.github/workflows/ci.yml`), so
+`set-admin-password.php` is linted on PHP 8.2, 8.3 and 8.4 on every push.

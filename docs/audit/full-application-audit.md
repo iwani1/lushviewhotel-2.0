@@ -21,7 +21,7 @@ a pattern match alone.
 | Area | Verdict |
 |---|---|
 | Known CVEs patched in this tree | ✅ **All verified patched** by reading the fixed code |
-| Password storage design | ✅ **Strong** — bcrypt primary, transparent legacy rehash on login for both customers and employees |
+| Password storage design | ⚠️ **Strong design, blocked by schema** — bcrypt primary with transparent legacy rehash on login, but the live `passwd` columns are `varchar(32)` and bcrypt needs 60. The rehash silently fails (or truncates and locks the account out) until migration 001 widens them. See §5.1 |
 | Debug/error exposure | ✅ **Safe** — `display_errors` correctly gated behind `_PS_MODE_DEV_` (default false) |
 | Committed credentials | ✅ **None** — `config/settings.inc.php` absent and gitignored |
 | Shared-hosting compatibility | ✅ **Good** — every `exec`/`shell_exec` path degrades gracefully |
@@ -278,12 +278,56 @@ And it upgrades transparently on successful login, for **both** account types:
   then re-hash with `passwordHash()` and `update()`.
 - Employees — `classes/Employee.php:303-305`: identical pattern.
 
-**Consequence for this project, and it is good news.** All 1,257 live customer hashes and all 15
-employee hashes are MD5-era today (measured). After the upgrade to 1.8.0, **each account migrates
-to bcrypt automatically the first time its owner logs in** — no script, no downtime, no reset
-required. That materially reduces the cost of the password-rotation remediation owed from the data
-exposure (§12): forced resets become unnecessary for accounts that would rehash anyway, though
-rotation is still advised for the 15 employee accounts because their hashes were publicly exposed.
+### 5.1 ⚠️ CORRECTION — the automatic rehash cannot run against the live schema
+
+**An earlier revision of this section stated that all accounts would migrate to bcrypt
+automatically on first login after the upgrade, needing no script. That is wrong, and it is
+corrected here.** The mechanism above is real and well designed, but it cannot work against the
+live database as it stands, because of a column width mismatch:
+
+| | Live 1.7.0 schema | QloApps 1.8.0 install schema |
+|---|---|---|
+| `qlo_customer.passwd` | **`varchar(32)`** | `varchar(60)` (`install-dev/data/db_structure.sql:605`) |
+| `qlo_employee.passwd` | **`varchar(32)`** | `varchar(60)` (`install-dev/data/db_structure.sql:791`) |
+
+32 characters is exactly an MD5 hex digest — the width the legacy scheme needs. A bcrypt digest
+is **60 characters**, which is precisely why 1.8.0 widened the column. **Nothing in this
+repository performs that widening:** `install-dev/upgrade/sql/` stops at `1.6.1.0.sql` and
+`modules/hotelreservationsystem/upgrade/` stops at `upgrade-1.6.0.php`, so there is no
+1.7.0 → 1.8.0 migration of any kind (see §2.9).
+
+So when 1.8.0 code runs `passwordHash()` on login and writes 60 characters into a
+`varchar(32)` column, the write fails. How it fails depends on the server's `sql_mode`:
+
+| Server mode | Outcome |
+|---|---|
+| **STRICT** (MariaDB's default since 10.2) | The UPDATE is rejected with error 1406. Because `classes/db/DbPDO.php:69` constructs the PDO handle with only `PDO::ATTR_TIMEOUT` and **no `PDO::ATTR_ERRMODE`**, PDO defaults to `ERRMODE_SILENT` — the failure is swallowed, login still succeeds, and the password **stays MD5 forever**. The advertised automatic upgrade simply never happens. |
+| **NON-STRICT** | The value is **silently truncated to 32 characters**. The stored string still begins `$2y$`, so `isPrimaryHash()` reports it as already primary, but `password_verify()` can never match it. The account is **permanently locked out** and the original MD5 hash has been destroyed — unrecoverable without a reset. |
+
+Either outcome affects all **1,257 customers and 15 employees**. The non-strict case is a
+mass-lockout scenario triggered by the *first successful login* of each account, which is why
+this must be fixed before upgrade rather than discovered afterwards.
+
+**Remediation.** Widen both columns before any 1.8.0 code touches the data:
+
+```sql
+ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(60) NOT NULL;
+ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(60) NOT NULL;
+```
+
+This is shipped as a version-controlled migration with a rollback and a pre-flight safety
+check at `dev/migrations/001_widen_password_columns.up.sql` / `.down.sql`. It is
+**non-destructive**: every existing 32-character MD5 hash still fits in `varchar(60)` and
+remains valid, because `validateHash()` tries every supported method and re-hashes on next
+login. Only after this migration does the transparent-upgrade claim above become true.
+
+The original good news still holds, with that precondition: after widening, each account
+migrates to bcrypt automatically the first time its owner logs in — no bulk script, no
+downtime, no forced reset. Rotation is still advised for the 15 employee accounts because
+their hashes were publicly exposed (§12), but the 1,257 customers need no forced reset.
+
+Note also that `qlo_customer.secure_key` remains `varchar(32)` in both schemas — it is not a
+bcrypt output, so it needs no widening.
 
 Also verified: encryption is OpenSSL-first (`classes/PhpEncryptionEngine.php`), with
 `classes/PhpEncryptionLegacyEngine.php:55` deriving an HMAC IV from `sha1(_COOKIE_KEY_)` only as a
@@ -387,7 +431,7 @@ Full detail in `../project/01-phase1-technical-assessment.md`. Headlines:
 |---|---|---|---|---|
 | 1 | Disable `qlohotelreview` on the live site (CVE-2025-67325, `active=1`, 0 reviews so nothing is lost) | **Critical** | Client | Live back office |
 | 2 | Make the repository private; file the GitHub Support purge request | **Critical** | Client | GitHub Settings / Support |
-| 3 | Rotate the 15 employee passwords; note §5 — customer hashes self-upgrade to bcrypt on login | **Critical** | Client | Live back office |
+| 3 | Rotate the 15 employee passwords (their hashes were publicly exposed). **Prerequisite for the upgrade:** apply `dev/migrations/001_widen_password_columns.up.sql` to widen `passwd` to `varchar(60)` — until then the automatic bcrypt rehash silently fails, or truncates and locks accounts out. See §5.1 | **Critical** | Client + us | Live back office / migration |
 | 4 | Apply `../deploy/live-site-hardening.md` (block `CHANGELOG.txt`, `composer.json`; WAF on `bo_query`; MySQL privileges) | **High** | Client | Live server |
 | 5 | Remove `admin-dev/filemanager/` unless its use is confirmed | Medium-High | Us, in Phase 3 | G4 |
 | 6 | Override `Customer::add()` to use `random_bytes()` for `secure_key` | Medium | Us, in Phase 3 | G2 |

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Switch the local installation between the two development databases:
+#
+#   fresh  qloapps_fresh  - clean 1.8.0 install with sample data
+#   live   qloapps_live   - your real production data (1,934 bookings, 1,257 guests)
+#
+# Usage:
+#   dev/scripts/use-db.sh fresh
+#   dev/scripts/use-db.sh live
+#   dev/scripts/use-db.sh            # just show which one is active
+#
+# What it does: rewrites _DB_NAME_ in config/settings.inc.php and clears the
+# caches that would otherwise serve data from the previous database. Clearing is
+# not optional - QloApps caches the class index and compiled Smarty templates,
+# and stale entries will make the switch appear to have done nothing.
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
+SETTINGS="config/settings.inc.php"
+
+current() {
+    grep -oP "(?<=_DB_NAME_', ')[^']*" "$SETTINGS" 2>/dev/null || echo "(not installed yet)"
+}
+
+target="${1:-}"
+if [ -z "$target" ]; then
+    echo "Active database: $(current)"
+    echo "Usage: dev/scripts/use-db.sh fresh|live"
+    exit 0
+fi
+
+case "$target" in
+    fresh) db="qloapps_fresh" ;;
+    live)  db="qloapps_live"  ;;
+    *) echo "error: unknown target '$target' (expected 'fresh' or 'live')" >&2; exit 1 ;;
+esac
+
+if [ ! -f "$SETTINGS" ]; then
+    echo "error: $SETTINGS does not exist." >&2
+    echo "       Run the installer first - see docs/project/05-local-development-setup.md" >&2
+    exit 1
+fi
+
+before="$(current)"
+sed -i "s/define('_DB_NAME_', '[^']*')/define('_DB_NAME_', '$db')/" "$SETTINGS"
+
+# Confirm the rewrite actually happened rather than assuming it did.
+after="$(current)"
+if [ "$after" != "$db" ]; then
+    echo "error: could not rewrite _DB_NAME_ (still '$after')." >&2
+    echo "       Check the file is writable: ls -l $SETTINGS" >&2
+    exit 1
+fi
+
+# Clear caches. The index.php guards inside these directories are preserved.
+rm -f cache/class_index.php
+find cache/smarty/compile -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
+find cache/smarty/cache    -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
+
+echo "Switched database: $before  ->  $after"
+echo "Cleared: cache/class_index.php and compiled Smarty templates."
+echo
+echo "Next: reload http://localhost:8080 (the first request rebuilds the cache)."
+if [ "$db" = "qloapps_live" ]; then
+    echo
+    echo "NOTE: you are now on real production data. Passwords imported from the live"
+    echo "      database cannot be used to log in - see the 'Logging in to the live-data"
+    echo "      database' section of docs/project/05-local-development-setup.md."
+fi

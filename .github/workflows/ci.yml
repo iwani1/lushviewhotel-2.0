@@ -51,7 +51,7 @@ jobs:
         # if you want that surface linted too.
         run: |
           set -u
-          dirs="Adapter Core admin-dev classes config controllers install-dev \
+          dirs="Adapter Core admin-dev classes config controllers dev install-dev \
                 js localization mails modules override pdf tests themes webservice"
           find $dirs -type f -name '*.php' -print0 2>/dev/null \
             | xargs -0 -n 1 -P "$(nproc)" php -l > /tmp/lint-all.txt 2>&1 || true

@@ -1,0 +1,65 @@
+# Local development environment for the Lush View Hotel platform.
+#
+#   docker compose up -d --build      start everything
+#   docker compose logs -f app        watch Apache/PHP logs
+#   docker compose down               stop (data is kept in the db_data volume)
+#   docker compose down -v            stop AND delete the database volume
+#
+# Fedora note: the ":z" suffixes on the bind mounts are required. SELinux is
+# enforcing by default on Fedora and without them Apache gets "Permission
+# denied" reading this directory. Do not remove them.
+#
+# Podman note: this file works with `podman compose` and with
+# `podman-compose` unchanged. If you use rootless Podman, see the ownership
+# section of docs/project/05-local-development-setup.md.
+
+services:
+  db:
+    # Pinned to match production exactly: the live server runs MariaDB 11.4.13.
+    image: mariadb:11.4
+    container_name: qlo-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: qlo_root_dev_only
+      MARIADB_DATABASE: qloapps_fresh
+      MARIADB_USER: qlo
+      MARIADB_PASSWORD: qlo_dev_only
+    ports:
+      # Bound to loopback only, and on 3307 so it cannot collide with any
+      # MariaDB you may already run on the host.
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      # Drop a .sql file in dev/docker/initdb/ and it runs ONCE, the first time
+      # the database volume is created. Left empty on purpose.
+      - ./dev/docker/initdb:/docker-entrypoint-initdb.d:z
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: dev/docker/Dockerfile
+    container_name: qlo-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      # The whole repository, so edits on your machine are live in the container.
+      - .:/var/www/html:z
+    environment:
+      # Tells the app container where the database is. Inside the compose
+      # network the hostname is "db", NOT "localhost".
+      QLO_DB_SERVER: db
+      QLO_DB_USER: qlo
+      QLO_DB_PASSWORD: qlo_dev_only
+
+volumes:
+  db_data:

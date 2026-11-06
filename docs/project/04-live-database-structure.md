@@ -329,6 +329,56 @@ This is a real change with real risk (index length limits under `utf8mb4` mean
 shorter prefixes), so it must not be bundled into the version upgrade. It should be its own
 change, on staging, with a rollback.
 
+### 5.7 🚨 The password columns are too narrow for the version we are upgrading to
+
+This is the most consequential structural difference between the live schema and 1.8.0, and
+it is a **hard blocker** rather than a cleanup item.
+
+| Column | Live 1.7.0 | QloApps 1.8.0 install schema |
+| --- | --- | --- |
+| `qlo_employee.passwd` | **`varchar(32) NOT NULL`** | `varchar(60) NOT NULL` (`install-dev/data/db_structure.sql:791`) |
+| `qlo_customer.passwd` | **`varchar(32) NOT NULL`** | `varchar(60) NOT NULL` (`install-dev/data/db_structure.sql:605`) |
+| `qlo_customer.secure_key` | `varchar(32) NOT NULL DEFAULT '-1'` | `varchar(32)` (`:616`) — unchanged, no action |
+
+32 characters is exactly the width of an MD5 hex digest, which is what the legacy scheme
+produces. 1.8.0 hashes with **bcrypt as its primary method**
+(`classes/PasswordHashing.php` → `password_hash($passwd, PASSWORD_BCRYPT)`), and a bcrypt
+digest is **60 characters** — which is precisely why 1.8.0 widened the column.
+
+The problem is that 1.8.0 re-hashes and writes back on every successful login
+(`classes/Employee.php:303-305`, `classes/Customer.php:413-415`), and **nothing in this
+repository widens the column first**: `install-dev/upgrade/sql/` stops at `1.6.1.0.sql` and
+`modules/hotelreservationsystem/upgrade/` stops at `upgrade-1.6.0.php`.
+
+So 60 characters get written into a 32-character column. The outcome depends on `sql_mode`:
+
+- **STRICT** (MariaDB's default since 10.2): the UPDATE is rejected with error 1406. Because
+  `classes/db/DbPDO.php:69` builds the PDO handle with only `PDO::ATTR_TIMEOUT` and **no
+  `PDO::ATTR_ERRMODE`**, PDO defaults to `ERRMODE_SILENT` — the failure is swallowed, login
+  still succeeds, and the password stays MD5. The advertised automatic upgrade to bcrypt never
+  happens for any of the 1,257 customers or 15 employees.
+- **NON-STRICT**: the value is silently **truncated to 32 characters**. It still begins `$2y$`,
+  so `isPrimaryHash()` reports the account as already migrated, but `password_verify()` can
+  never match it. The account is **permanently locked out** and the original MD5 hash is
+  destroyed — triggered by that user's *first successful login*.
+
+**Fix, which must run before any 1.8.0 code touches this data:**
+
+```sql
+ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(60) NOT NULL;
+ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(60) NOT NULL;
+```
+
+Shipped as `dev/migrations/001_widen_password_columns.up.sql` with a rollback that refuses to
+run if any bcrypt hash is already stored. The widening is **non-destructive**: every existing
+32-character MD5 hash still fits in `varchar(60)` and stays valid, because
+`PasswordHashing::validateHash()` tries every supported method and re-hashes on next login.
+
+This finding corrects an earlier claim in
+[`../audit/full-application-audit.md`](../audit/full-application-audit.md) §5 that passwords
+would migrate to bcrypt automatically with no script. They will — but only after this
+migration.
+
 ---
 
 ## 6. Referential integrity probe — what is actually broken
