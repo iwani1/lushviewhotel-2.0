@@ -1,0 +1,438 @@
+<?php
+/**
+* NOTICE OF LICENSE
+*
+* This source file is subject to the Academic Free License (AFL 3.0)
+* that is bundled with this package in the file LICENSE.md
+* It is also available through the world-wide-web at this URL:
+* https://opensource.org/licenses/afl-3.0.php
+* If you did not receive a copy of the license and are unable to
+* obtain it through the world-wide-web, please send an email
+* to support@qloapps.com so we can send you a copy immediately.
+*
+* DISCLAIMER
+*
+* Do not edit or add to this file if you wish to upgrade this module to a newer
+* versions in the future. If you wish to customize this module for your needs
+* please refer to https://store.webkul.com/customisation-guidelines for more information.
+*
+* @author Webkul IN
+* @copyright Since 2010 Webkul
+* @license https://opensource.org/licenses/afl-3.0.php Academic Free License 3.0
+*/
+
+class QloPaypalCommercePaymentModuleFrontController extends ModuleFrontController
+{
+    const WK_PAYPAL_COMMERCE_ACTION_CREATE_ORDER = 1;
+    const WK_PAYPAL_COMMERCE_ACTION_CAPTURE_ORDER = 2;
+    const WK_PAYPAL_COMMERCE_ACTION_CANCELLED = 3;
+
+    public function init()
+    {
+        parent::init();
+
+        $cart = $this->context->cart;
+
+        // cehck cart details
+        if ($cart->id_customer == 0
+            || !$this->module->active
+        ) {
+            Tools::redirect($this->context->link->getPageLink('order-opc', true, null));
+        }
+
+        // Check that this payment option is still available in case the customer
+        // changed his address just before the end of the checkout process
+        $authorized = false;
+        foreach (Module::getPaymentModules() as $module) {
+            if ($module['name'] == 'qlopaypalcommerce') {
+                $authorized = true;
+                break;
+            }
+        }
+
+        if (!$authorized) {
+            die($this->module->l('This payment method is not available.', 'payment'));
+        }
+
+        $customer = new Customer($cart->id_customer);
+        if (!Validate::isLoadedObject($customer)) {
+            Tools::redirect($this->context->link->getPageLink('order-opc', true, null));
+        }
+    }
+
+    public function initContent()
+    {
+        parent::initContent();
+
+        if ($this->module->secure_key != Tools::getValue('token')) {
+            die($this->module->l('Invalid token.', 'payment'));
+        }
+
+        if (Tools::isSubmit('action')) {
+            $action = (int)Tools::getValue('action');
+            switch ($action) {
+                case self::WK_PAYPAL_COMMERCE_ACTION_CREATE_ORDER:
+                    $json = Tools::file_get_contents('php://input');
+                    $orderDetails = json_decode($json, true);
+
+                    $cart = $this->context->cart;
+
+                    WkPaypalCommerceHelper::logMsg('payment', 'Payment initiated...', true);
+                    WkPaypalCommerceHelper::logMsg('payment', 'Environment: '. Configuration::get('WK_PAYPAL_COMMERCE_PAYMENT_MODE'));
+                    WkPaypalCommerceHelper::logMsg('payment', 'Cart ID: '. $cart->id);
+                    WkPaypalCommerceHelper::logMsg('payment', 'Customer ID: '. $cart->id_customer);
+                    WkPaypalCommerceHelper::logMsg('payment', 'Currency ID: '. $cart->id_currency);
+                    WkPaypalCommerceHelper::logMsg('payment', 'Cart Total: '. $cart->getOrderTotal(true, Cart::BOTH));
+                    WkPaypalCommerceHelper::logMsg('payment', 'Payment request data: ');
+
+                    $ppCommerce = new PayPalCommerce();
+                    header('Content-Type: application/json');
+
+                    // create order
+                    $orderDetails['original'] = $this->getOrderDetails();
+                    WkPaypalCommerceHelper::logMsg('payment', json_encode($orderDetails));
+
+                    $ppOrderData = $ppCommerce->orders->create($orderDetails);
+
+                    WkPaypalCommerceHelper::logMsg('payment', 'Payment response data: ', true);
+                    WkPaypalCommerceHelper::logMsg('payment', json_encode($ppOrderData));
+
+                    die(json_encode($ppOrderData));
+                case self::WK_PAYPAL_COMMERCE_ACTION_CAPTURE_ORDER:
+                    $json = Tools::file_get_contents('php://input');
+                    $orderData = json_decode($json, true);
+
+                    if ($orderData['orderID'] && $orderData['getOrderData']) {
+                        $ppCommerce = new PayPalCommerce();
+                        $returnData = $ppCommerce->orders->capture($orderData['orderID']);
+                        header('Content-Type: application/json');
+                        echo json_encode($returnData['data']);
+                        die;
+                    } elseif (Tools::getIsset('order_id')) {
+                        $orderID = Tools::getValue('order_id');
+                        $ppCommerce = new PayPalCommerce();
+                        $returnData = $ppCommerce->orders->get($orderID);
+                        $cart = $this->context->cart;
+                        $customer = new Customer($cart->id_customer);
+
+                        WkPaypalCommerceHelper::logMsg('payment', 'Payment response...', true);
+                        WkPaypalCommerceHelper::logMsg('payment', 'Cart ID: '. $cart->id);
+                        WkPaypalCommerceHelper::logMsg('payment', 'Customer ID: '. $cart->id_customer);
+                        WkPaypalCommerceHelper::logMsg('payment', 'Currency ID: '. $cart->id_currency);
+                        WkPaypalCommerceHelper::logMsg('payment', 'Cart Total: '. $cart->getOrderTotal(true, Cart::BOTH));
+                        WkPaypalCommerceHelper::logMsg('payment', json_encode($returnData));
+
+                        if (isset($returnData['data']['id']) && !empty($returnData['data']['id'])) {
+                            // Payment success
+                            $paypalOrderID = $returnData['data']['id'];
+
+                            $paymentStatus = '';
+
+                            if (isset($returnData['data']['purchase_units'][0]['payments']['captures'][0]['status'])) {
+                                $paymentStatus = $returnData['data']['purchase_units'][0]['payments']['captures'][0]['status'];
+                            }
+
+                            $paypalOrderCartId = isset($returnData['data']['purchase_units'][0]['custom_id']) ? $returnData['data']['purchase_units'][0]['custom_id'] : null;
+                            $belongsToCurrentCart = ((int) $paypalOrderCartId === (int) $cart->id);
+
+                            // captured currency must match the cart currency, otherwise the captured amount cannot be compared with the cart total
+                            $capturedCurrency = isset($returnData['data']['purchase_units'][0]['payments']['captures'][0]['amount']['currency_code']) ?
+                                $returnData['data']['purchase_units'][0]['payments']['captures'][0]['amount']['currency_code'] : '';
+                            // payment is deducted in the captured currency, so order must be created in that currency
+                            if ($capturedCurrency && $paymentStatus == WkPaypalCommerceWebhook::WK_PAYPAL_COMMERCE_PAYMENT_STATUS_COMPLETED && $belongsToCurrentCart) {
+                                $cartCurrency = Currency::getCurrency((int) $cart->id_currency);
+                                if (Tools::strtoupper($capturedCurrency) !== Tools::strtoupper($cartCurrency['iso_code'])) {
+                                    $idCapturedCurrency = (int) Currency::getIdByIsoCode($capturedCurrency);
+                                    $objCapturedCurrency = new Currency($idCapturedCurrency);
+                                    if (Validate::isLoadedObject($objCapturedCurrency) && $objCapturedCurrency->active && !$objCapturedCurrency->deleted) {
+                                        WkPaypalCommerceHelper::logMsg(
+                                            'payment',
+                                            'Switching cart currency from '.$cartCurrency['iso_code'].' to PayPal captured currency '.$capturedCurrency
+                                        );
+                                        $cart->id_currency = $idCapturedCurrency;
+                                        $cart->update();
+                                        $this->context->currency = $objCapturedCurrency;
+                                        $this->context->cart = $cart;
+                                    }
+                                }
+                            }
+                            $cartCurrency = Currency::getCurrency((int) $cart->id_currency);
+                            $currencyMatches = (Tools::strtoupper($capturedCurrency) === Tools::strtoupper($cartCurrency['iso_code']));
+
+                            if ($paypalOrderID && $paymentStatus == WkPaypalCommerceWebhook::WK_PAYPAL_COMMERCE_PAYMENT_STATUS_COMPLETED && $belongsToCurrentCart && $currencyMatches) {
+                                // Save order data
+                                $this->saveOrderData($returnData);
+                                $currency = $this->context->currency;
+                                // Order status/amount must reflect what PayPal actually captured,
+                                // not the cart's is_advance_payment flag (still editable by the
+                                // customer after payment, so it cannot be trusted here).
+                                $capturedAmount = isset($returnData['data']['purchase_units'][0]['payments']['captures'][0]['amount']['value']) ?
+                                 (float) $returnData['data']['purchase_units'][0]['payments']['captures'][0]['amount']['value'] : 0;
+                                $fullTotal = (float) $cart->getOrderTotal(true, Cart::BOTH);
+                                $isFullyPaid = $capturedAmount >= $fullTotal;
+
+                                // set order status
+                                if ($returnData['data']['status'] == WkPaypalCommerceWebhook::WK_PAYPAL_COMMERCE_PAYMENT_STATUS_COMPLETED) {
+                                    $orderStatus = $isFullyPaid
+                                        ? Configuration::get('PS_OS_PAYMENT_ACCEPTED')
+                                        : Configuration::get('PS_OS_PARTIAL_PAYMENT_ACCEPTED');
+                                } else {
+                                    $orderStatus = Configuration::get('PS_OS_AWAITING_PAYMENT');
+                                }
+
+                                $transactionId = '';
+                                if (isset($returnData['data']['purchase_units'][0]['payments']['captures'][0]['id'])) {
+                                    $transactionId = $returnData['data']['purchase_units'][0]['payments']['captures'][0]['id'];
+                                }
+                                $extraVars = array('transaction_id' => $transactionId);
+                                // create order for the payment
+                                $this->module->validateOrder(
+                                    $cart->id,
+                                    $orderStatus,
+                                    $capturedAmount,
+                                    $this->module->l('PayPal Checkout', 'payment'),
+                                    null,
+                                    $extraVars,
+                                    (int)$currency->id,
+                                    false,
+                                    $customer->secure_key
+                                );
+
+                                // Update order id in paypal_seller_order table
+                                $objOrder = new Order($this->module->currentOrder);
+                                WkPayPalCommerceOrder::updateOrderReference(
+                                    $paypalOrderID,
+                                    $objOrder->reference
+                                );
+
+                                WkPaypalCommerceHelper::logMsg('payment', 'Order ID: '. $this->module->currentOrder);
+                                WkPaypalCommerceHelper::logMsg('payment', '--------------', true);
+
+                                $link = new Link();
+                                $orderLink = $link->getPageLink(
+                                    'order-confirmation',
+                                    null,
+                                    (int)Context::getContext()->language->id,
+                                    array(
+                                        'id_cart' => (int)$cart->id,
+                                        'id_module' => (int)$this->module->id,
+                                        'id_order' => (int)$this->module->currentOrder,
+                                        'key' => $customer->secure_key,
+                                    )
+                                );
+                                Tools::redirect($orderLink);
+                            } else {
+                                if ($paypalOrderID && $paymentStatus == WkPaypalCommerceWebhook::WK_PAYPAL_COMMERCE_PAYMENT_STATUS_COMPLETED && !$belongsToCurrentCart) {
+                                    WkPaypalCommerceHelper::logMsg(
+                                        'payment',
+                                        'PayPal order/cart mismatch. Expected cart: '.$cart->id.', PayPal custom_id: '.$paypalOrderCartId
+                                    );
+                                }
+                                if ($paypalOrderID && $paymentStatus == WkPaypalCommerceWebhook::WK_PAYPAL_COMMERCE_PAYMENT_STATUS_COMPLETED && $belongsToCurrentCart && !$currencyMatches) {
+                                    WkPaypalCommerceHelper::logMsg(
+                                        'payment',
+                                        'PayPal currency mismatch. Expected currency: '.$cartCurrency['iso_code'].', PayPal captured currency: '.$capturedCurrency
+                                    );
+                                }
+                                WkPaypalCommerceHelper::logMsg('payment', 'Payment status'. $returnData['data']['status']);
+                                WkPaypalCommerceHelper::logMsg('payment', '--------------', true);
+                                Tools::redirect('index.php?controller=order&step=1');
+                            }
+                        } else {
+                            WkPaypalCommerceHelper::logMsg('payment', 'Payment failed...', true);
+                            WkPaypalCommerceHelper::logMsg(
+                                'payment',
+                                'Payment failed message: '.$returnData['data']['name']
+                            );
+                            WkPaypalCommerceHelper::logMsg(
+                                'payment',
+                                'Payment failed message: '.$returnData['data']['message']
+                            );
+                            WkPaypalCommerceHelper::logMsg('payment', '--------------', true);
+                            $failedLink = $this->context->link->getModuleLink(
+                                'qlopaypalcommerce',
+                                'errorpayment',
+                                array(
+                                    'err_name' => $returnData['data']['name'],
+                                    'err_msg' => $returnData['data']['message']
+                                )
+                            );
+                            Tools::redirect($failedLink);
+                        }
+                    }
+                    break;
+                case self::WK_PAYPAL_COMMERCE_ACTION_CANCELLED:
+                    WkPaypalCommerceHelper::logMsg('payment', 'Payment cancelled by customer...', true);
+                    WkPaypalCommerceHelper::logMsg('payment', json_encode(Tools::getAllValues()));
+                    WkPaypalCommerceHelper::logMsg('payment', '--------------', true);
+
+                    Tools::redirect($this->context->link->getPageLink('order-opc', true, null).'?pp_cancel=1');
+                    break;
+                default:
+                    # code...
+                    break;
+            }
+        }
+        die;
+    }
+
+    // Save order data
+    private function saveOrderData($orderData)
+    {
+        if ($orderData) {
+            $purchaseUnits = $orderData['data']['purchase_units'];
+            foreach ($purchaseUnits as $purchase) {
+                $transactionId = $purchase['payments']['captures'][0]['id'];
+                $paymentStatus = $purchase['payments']['captures'][0]['status'];
+                $paymentTotal = $purchase['payments']['captures'][0]['amount']['value'];
+                $paymentCurrency = $purchase['payments']['captures'][0]['amount']['currency_code'];
+
+                $cart = $this->context->cart;
+                $currency = Currency::getCurrency((int) $cart->id_currency);
+
+                // total order amount
+                if ($cart->is_advance_payment) {
+                    $cartTotalAmountTI = $cart->getOrderTotal(true, Cart::ADVANCE_PAYMENT);
+                } else {
+                    $cartTotalAmountTI = $cart->getOrderTotal(true, Cart::BOTH);
+                }
+
+                $orderObj = new WkPayPalCommerceOrder();
+                $orderObj->order_reference = '';
+                $orderObj->id_cart = (int)$cart->id;
+                $orderObj->id_currency = (int)$cart->id_currency;
+                $orderObj->environment = Configuration::get('WK_PAYPAL_COMMERCE_PAYMENT_MODE');
+                $orderObj->id_customer = (int)$cart->id_customer;
+                $orderObj->order_total = (float)$cartTotalAmountTI;
+                $orderObj->checkout_currency = $currency['iso_code'];
+
+                // PayPal Returned Data
+                $orderObj->pp_paid_total = (float)$paymentTotal;
+                $orderObj->pp_paid_currency = $paymentCurrency;
+                $orderObj->pp_reference_id = $purchase['reference_id'];
+                $orderObj->pp_order_id = $orderData['data']['id'];
+                $orderObj->pp_transaction_id = $transactionId;
+                $orderObj->pp_payment_status = $paymentStatus;
+                $orderObj->response = json_encode($orderData);
+                $orderObj->order_date = date('Y-m-d H:i:s');
+                $orderObj->save();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    // Create order data to send to PayPal
+    private function getOrderDetails()
+    {
+        $orderData = array();
+        $orderData['intent'] = 'CAPTURE';
+
+        $cart = $this->context->cart;
+        $customer = new Customer((int)$cart->id_customer);
+
+        $ppHelper = new WkPaypalCommerceHelper();
+
+        $orderData['payer'] = array(
+            'name' => array(
+                'given_name' => $customer->firstname,
+                'surname' => $customer->lastname
+            ),
+            'email_address' => $customer->email
+        );
+
+        // address is not required in paypal payment, if customer has added an address then we add tha address to paypal payer object
+        if ($billingAddress = $ppHelper->getSimpleAddress(
+            (int)$cart->id_customer,
+            (int)$cart->id_address_invoice
+        )) {
+            $orderData['payer']['address'] = array(
+                'address_line_1' => $billingAddress['address1'],
+                'address_line_2' => $billingAddress['address2'],
+                'admin_area_2' => $billingAddress['city'],
+                'admin_area_1' => $billingAddress['state_iso'],
+                'postal_code' => $billingAddress['postcode'],
+                'country_code' => $billingAddress['country_iso'],
+            );
+        }
+
+        $timestamp = time().rand(100, 999);
+        $currency = Currency::getCurrency((int) $cart->id_currency);
+
+        $discountTI = $cart->getOrderTotal(true, Cart::ONLY_DISCOUNTS);
+        $discountTE = $cart->getOrderTotal(false, Cart::ONLY_DISCOUNTS);
+
+
+        // total cart amount
+        // items totals will be calculated after removing discount from the total cart as additional facility is also considered as an item
+        if ($cart->is_advance_payment) {
+            $cartTotalAmountTI = $cart->getOrderTotal(true, Cart::ADVANCE_PAYMENT);
+            $cartTotalAmountTE = $cart->getOrderTotal(false, Cart::ADVANCE_PAYMENT);
+
+            $itemTotalAmountTI = $cartTotalAmountTI + $discountTI;
+            $itemTotalAmountTE = $cartTotalAmountTE + $discountTE;
+        } else {
+            $cartTotalAmountTI = $cart->getOrderTotal(true, Cart::BOTH);
+            $cartTotalAmountTE = $cart->getOrderTotal(false, Cart::BOTH);
+
+            $itemTotalAmountTI = $cartTotalAmountTI + $discountTI;
+            $itemTotalAmountTE = $cartTotalAmountTE + $discountTE;
+        }
+
+        $orderData['purchase_units'][0] = array(
+            'reference_id' => $timestamp,
+            'description' => "Payment for " . Configuration::get('PS_SHOP_NAME'),
+            // Maxlength 22
+            'soft_descriptor' => Tools::substr(Configuration::get('PS_SHOP_NAME'), 0, 21),
+            'payment_group_id' => 1,
+            'custom_id' => $cart->id,
+            'invoice_id' => 'INV-' . $timestamp,
+        );
+
+        $orderData['purchase_units'][0]['amount'] = array(
+            'currency_code' => $currency['iso_code'],
+            'value' => number_format(Tools::ps_round($cartTotalAmountTI, 2), 2, '.', ''),
+            'breakdown' => array(
+                'item_total' => array(
+                    'currency_code' => $currency['iso_code'],
+                    'value' => number_format(Tools::ps_round($itemTotalAmountTE, 2), 2, '.', ''),
+                ),
+                'shipping' => array(
+                    'currency_code' => $currency['iso_code'],
+                    'value' => '0.00',
+                ),
+                'shipping_discount' => array(
+                    'currency_code' => $currency['iso_code'],
+                    'value' => '0.00',
+                ),
+                'tax_total' => array(
+                    'currency_code' => $currency['iso_code'],
+                    'value' => number_format(Tools::ps_round(($itemTotalAmountTI - $itemTotalAmountTE), 2), 2, '.', ''),
+                ),
+                'discount' => array(
+                    'currency_code' => $currency['iso_code'],
+                    'value' => number_format(Tools::ps_round($discountTI, 2), 2, '.', ''),
+                ),
+            )
+        );
+
+        // set item details (for rounding issue, paypal said not to send item details)
+        // $items = $ppHelper->getPaypalOrderItemDetails($cart->id);
+        // $orderData['purchase_units'][0]['items'] = array_values($items);
+
+        $wkEnvironment = Configuration::get('WK_PAYPAL_COMMERCE_PAYMENT_MODE');
+        $merchantId = ($wkEnvironment == QloPaypalCommerce::WK_PAYPAL_COMMERCE_PAYMENT_MODE_PRODUCTION) ? Configuration::get('WK_PAYPAL_COMMERCE_LIVE_MERCHANT_ID') : Configuration::get('WK_PAYPAL_COMMERCE_SANDBOX_MERCHANT_ID');
+        $orderData['purchase_units'][0]['payee'] = array(
+            'merchant_id' => $merchantId
+        );
+
+        $orderData['application_context'] = array(
+            'user_action' => 'PAY_NOW',
+            'shipping_preference' => 'NO_SHIPPING',
+        );
+
+        return $orderData;
+    }
+}

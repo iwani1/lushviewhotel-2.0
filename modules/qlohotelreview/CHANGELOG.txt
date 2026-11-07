@@ -1,0 +1,34 @@
+------------------------------
+# V1.0.2 to V1.0.3
+------------------------------
+
+## Improved/Changed Features:
+
+* [FO] : [#1786] Added a new front controller and updated review request/reply emails and JS as part of the refund and booking status updates.
+* [BO] : [#1713] Renamed "Hotel" to "Property" labels in the hotel review list in the back-office.
+
+------------------------------
+# V1.0.1 to V1.0.2
+------------------------------
+
+## Improved/Changed Features:
+
+* [CO] : [#1464] Updated for PHP version 8.1 to 8.4 and MYSql 8 compatibility
+
+------------------------------
+# V1.0.0 to V1.0.1
+------------------------------
+
+## Improved/Changed Features:
+
+* [CO] : [#780] Updated replace 'shop' and 'shopping' with 'website' and 'booking' in email templates
+* [BO] : [#918] New design of order detail page of the admin in back-office
+* [BO] : [#1076] Fixed php warning on order detail page if all rooms from order are deleted
+* [CO] : [#1040] Updated Qloapps cleaner | Added hook for data cleaning in other module and fixed incorrect data being deleted.
+* [FO] : [#1171] Fixed the RTL languages design issues on the front office.
+* [CO] : [#1195] Added process for smarty template overriding.
+
+Changelog
+
+v1.0.0
+- first release

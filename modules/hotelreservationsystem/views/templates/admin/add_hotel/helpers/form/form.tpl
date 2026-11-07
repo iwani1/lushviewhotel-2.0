@@ -1,0 +1,808 @@
+{**
+* NOTICE OF LICENSE
+*
+* This source file is subject to the Open Software License version 3.0
+* that is bundled with this package in the file LICENSE.md
+* It is also available through the world-wide-web at this URL:
+* https://opensource.org/license/osl-3-0-php
+* If you did not receive a copy of the license and are unable to
+* obtain it through the world-wide-web, please send an email
+* to support@qloapps.com so we can send you a copy immediately.
+*
+* DISCLAIMER
+*
+* Do not edit or add to this file if you wish to upgrade this module to a newer
+* versions in the future. If you wish to customize this module for your needs
+* please refer to https://store.webkul.com/customisation-guidelines for more information.
+*
+* @author Webkul IN
+* @copyright Since 2010 Webkul
+* @license https://opensource.org/license/osl-3-0-php Open Software License version 3.0
+*}
+
+<div class="panel">
+	<div class="panel-heading">
+		{if isset($edit)}
+			<i class='icon-pencil'></i> {l s='Edit Property' mod='hotelreservationsystem'}
+		{else}
+			<i class='icon-plus'></i> {l s='Add New Property' mod='hotelreservationsystem'}
+		{/if}
+	</div>
+
+	<form id="{$table|escape:'htmlall':'UTF-8'}_form" class="defaultForm {$name_controller|escape:'htmlall':'UTF-8'} form-horizontal" action="{$current|escape:'htmlall':'UTF-8'}&{if !empty($submit_action)}{$submit_action|escape:'htmlall':'UTF-8'}{/if}&token={$token|escape:'htmlall':'UTF-8'}" method="post" enctype="multipart/form-data" {if isset($style)}style="{$style|escape:'htmlall':'UTF-8'}"{/if}>
+		<input type="hidden" id="htl_active_tab" name="htl_active_tab" value="">
+		{if isset($edit)}
+			{assign var=hook_arg_id_hotel value=$hotel_info.id}
+		{else}
+			{assign var=hook_arg_id_hotel value=null}
+		{/if}
+		{hook h='displayAdminAddHotelFormTop' id_hotel=$hook_arg_id_hotel}
+		{if count($languages) > 1}
+			<div class="row">
+				<div class="col-lg-12">
+					<label class="control-label">{l s='Choose Language' mod='hotelreservationsystem'}</label>
+					<input type="hidden" name="choosedLangId" id="choosedLangId" value="{$currentLang.id_lang}">
+					<button type="button" id="multi_lang_btn" class="btn btn-default dropdown-toggle wk_language_toggle" data-toggle="dropdown">
+						{$currentLang.name}
+						<span class="caret"></span>
+					</button>
+					<ul class="dropdown-menu wk_language_menu" style="left:14%;top:32px;">
+						{foreach from=$languages item=language}
+							<li>
+								<a href="javascript:void(0)" onclick="showLangField('{$language.name}', {$language.id_lang});">
+									{$language.name}
+								</a>
+							</li>
+						{/foreach}
+					</ul>
+					<p class="help-block">{l s='Change language here to update information in multiple languages.' mod='hotelreservationsystem'}</p>
+					<hr>
+				</div>
+			</div>
+		{/if}
+		{hook h='displayAdminAddHotelFormTabsBefore' id_hotel=$hook_arg_id_hotel}
+		<div class="tabs wk-tabs-panel">
+			<ul class="nav nav-tabs">
+				<li class="active">
+					<a href="#hotel-information" data-toggle="tab">
+						<i class="icon-info-sign"></i>
+						{l s='Information' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				<li>
+					<a href="#hotel-seo" data-toggle="tab">
+						<i class="icon-link"></i>
+						{l s='Seo' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				<li>
+					<a href="#hotel-images" data-toggle="tab">
+						<i class="icon-image"></i>
+						{l s='Images' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				<li>
+					<a href="#hotel-booking-restrictions" data-toggle="tab">
+						<i class="icon-lock"></i>
+						{l s='Restrictions' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				<li>
+					<a href="#hotel-refund-policies" data-toggle="tab">
+						<i class="icon-file"></i>
+						{l s='Refund Policies' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				<li>
+					<a href="#hotel-features" data-toggle="tab">
+						<i class="icon-list-alt"></i>
+						{l s='Amenities' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				{if isset($use_tourism_tax) && $use_tourism_tax}
+				<li>
+					<a href="#hotel-tourism-tax" data-toggle="tab">
+						<i class="icon-money"></i>
+						{l s='Tourism Tax' mod='hotelreservationsystem'}
+					</a>
+				</li>
+				{/if}
+				{hook h='displayAdminAddHotelFormTab' id_hotel=$hook_arg_id_hotel}
+			</ul>
+			<div class="tab-content panel collapse in">
+				<div class="tab-pane active" id="hotel-information">
+					{hook h='displayAdminAddHotelFormInformationTabBefore' id_hotel=$hook_arg_id_hotel}
+
+					{if isset($edit)}
+						<input id="id-hotel" type="hidden" value="{$hotel_info.id|escape:'html':'UTF-8'}" name="id" />
+					{/if}
+					<div class="form-group">
+						<label class="control-label col-lg-3">
+							<span>
+								{l s='Enable' mod='hotelreservationsystem'}
+							</span>
+						</label>
+						<div class="col-lg-9 ">
+							<span class="switch prestashop-switch fixed-width-lg">
+								<input type="radio" {if isset($edit) && $hotel_info.active==1} checked="checked" {else}checked="checked"{/if} value="1" id="ENABLE_HOTEL_on" name="ENABLE_HOTEL">
+								<label for="ENABLE_HOTEL_on">{l s='Yes' mod='hotelreservationsystem'}</label>
+								<input {if isset($edit) && $hotel_info.active==0} checked="checked" {/if} type="radio" value="0" id="ENABLE_HOTEL_off" name="ENABLE_HOTEL">
+								<label for="ENABLE_HOTEL_off">{l s='No' mod='hotelreservationsystem'}</label>
+								<a class="slide-button btn"></a>
+							</span>
+						</div>
+					</div>
+					{if isset($hotel_property_types_info) && $hotel_property_types_info}
+						<div class="form-group">
+							<label class="control-label col-sm-3 " for="id_property_type">
+								<span>
+									{l s='Property Type :' mod='hotelreservationsystem'}
+								</span>
+							</label>
+							<div class="col-sm-6">
+								<select name="id_property_type" id="id_property_type" class="form-control chosen">
+									{foreach from=$hotel_property_types_info item=property_type}
+										<option value="{$property_type.id_property_type|escape:'htmlall':'UTF-8'}"
+											{if isset($selected_hotel_property_type) && $selected_hotel_property_type == $property_type.id_property_type}selected{/if}>
+											{$property_type.name|escape:'htmlall':'UTF-8'}
+										</option>
+									{/foreach}
+								</select>
+							</div>
+						</div>
+					{/if}
+					<div class="form-group">
+						<label class="col-sm-3 control-label required" for="hotel_name" >
+							{l s='Name :' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="hotel_name" value="hotel_name_`$language.id_lang`"}
+								<input type="text"
+								id="name_{$language.id_lang}"
+								name="hotel_name_{$language.id_lang}"
+								value="{if isset($smarty.post.$hotel_name)}{$smarty.post.$hotel_name|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.hotel_name[{$language.id_lang}]|escape:'htmlall':'UTF-8'}{/if}"
+								class="form-control wk_text_field_all wk_text_field_{$language.id_lang} copy2friendlyUrl"
+								maxlength="128"
+								{if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if} />
+							{/foreach}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label">
+							{l s='Short Description :' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="short_desc_name" value="short_description_`$language.id_lang`"}
+								<div id="short_desc_div_{$language.id_lang}" class="wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if}>
+									<textarea
+									name="short_description_{$language.id_lang}"
+									id="short_description_{$language.id_lang}"
+									{if isset($PS_SHORT_DESC_LIMIT) && $PS_SHORT_DESC_LIMIT} maxlength="{$PS_SHORT_DESC_LIMIT|intval}"{/if}
+									cols="2" rows="3"
+									class="form-control">{if isset($smarty.post.$short_desc_name)}{$smarty.post.$short_desc_name|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.short_description[{$language.id_lang}]|escape:'htmlall':'UTF-8'}{/if}</textarea>
+								</div>
+							{/foreach}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label">
+							{l s='Description :' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="description" value="description_`$language.id_lang`"}
+								<div id="description_div_{$language.id_lang}" class="wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if}>
+									<textarea
+									name="description_{$language.id_lang}"
+									id="description_{$language.id_lang}"
+									cols="2" rows="3"
+									class="wk_tinymce form-control">{if isset($smarty.post.$description)}{$smarty.post.$description|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.description[{$language.id_lang}]|escape:'htmlall':'UTF-8'}{/if}</textarea>
+								</div>
+							{/foreach}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label required">{l s='Phone :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input type="text" name="phone" id="phone" value="{if isset($smarty.post.phone)}{$smarty.post.phone|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$address_info.phone|escape:'htmlall':'UTF-8'}{/if}"/>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-lg-3 control-label required">{l s='Email :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<div class="input-group">
+								<span class="input-group-addon">
+									<i class="icon-envelope-o"></i>
+								</span>
+								<input class="reg_sel_input form-control-static" type="text" name="email" id="hotel_email" value="{if isset($smarty.post.email)}{$smarty.post.email|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.email|escape:'htmlall':'UTF-8'}{/if}"/>
+							</div>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label" for="vat_number">{l s='VAT Number' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input autocomplete="off" type="text" class="form-control" id="vat_number" name="vat_number" value="{if isset($smarty.post.vat_number)}{$smarty.post.vat_number|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$address_info.vat_number|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label required">{l s='Address :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<textarea name="address" rows="4" cols="35" >{if isset($smarty.post.address)}{$smarty.post.address|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$address_info.address1|escape:'htmlall':'UTF-8'}{/if}</textarea>
+						</div>
+					</div>
+					<div class="form-group check_in_div" style="position:relative">
+						<label class="col-sm-3 control-label" for="fax">{l s='Fax' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input autocomplete="off" type="text" class="form-control" id="fax" name="fax" value="{if isset($smarty.post.fax)}{$smarty.post.fax|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.fax|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3 " for="hotel_country">{l s='Rating :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<div style="width: 195px;">
+								<select class="form-control" name="hotel_rating" id="hotel_rating" value="">
+									<option value="0">{l s='No star' mod='hotelreservationsystem'}</option>
+									<option value="1" {if (isset($smarty.post.hotel_rating) && $smarty.post.hotel_rating == '1') || isset($edit) && $hotel_info['rating'] == '1'}selected{/if}>*</option>
+									<option value="2" {if (isset($smarty.post.hotel_rating) && $smarty.post.hotel_rating == '2') || isset($edit) && $hotel_info['rating'] == '2'}selected{/if}>**</option>
+									<option value="3" {if (isset($smarty.post.hotel_rating) && $smarty.post.hotel_rating == '3') || isset($edit) && $hotel_info['rating'] == '3'}selected{/if}>***</option>
+									<option value="4" {if (isset($smarty.post.hotel_rating) && $smarty.post.hotel_rating == '4') || isset($edit) && $hotel_info['rating'] == '4'}selected{/if}>****</option>
+									<option value="5" {if (isset($smarty.post.hotel_rating) && $smarty.post.hotel_rating == '5') || isset($edit) && $hotel_info['rating'] == '5'}selected{/if}>*****</option>
+								</select>
+							</div>
+						</div>
+					</div>
+					<div class="form-group check_in_div" style="position:relative">
+						<label class="col-sm-3 control-label required" for="check_in_time">
+							{l s='Check-in:' mod='hotelreservationsystem'}
+						</label>
+						<div class="col-sm-2">
+							<input autocomplete="off" type="text" class="form-control" id="check_in_time" name="check_in" value="{if isset($smarty.post.check_in)}{$smarty.post.check_in|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.check_in|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group check_out_div" style="position:relative">
+						<label class="col-sm-3 control-label required" for="check_out_time">
+							{l s='Check-out:' mod='hotelreservationsystem'}
+						</label>
+						<div class="col-sm-2">
+							<input autocomplete="off" type="text" class="form-control" id="check_out_time" name="check_out" value="{if isset($smarty.post.check_out)}{$smarty.post.check_out|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.check_out|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3 required" for="hotel_country">{l s='Country :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-9">
+							<div style="width: 195px;">
+								<select class="form-control" name="hotel_country" id="hotel_country" value="">
+									<option value="0" selected="selected">{l s='Choose your Country' mod='hotelreservationsystem'} </option>
+									{if $country_var}
+										{foreach $country_var as $countr}
+											<option value="{$countr['id_country']}" {if isset($smarty.post.hotel_country) && $smarty.post.hotel_country}{if $smarty.post.hotel_country == $countr['id_country']}selected{/if}{elseif isset($edit) && $address_info['id_country'] == $countr['id_country']}selected{/if}>{$countr['name']}</option>
+										{/foreach}
+									{/if}
+								</select>
+							</div>
+							<div class="help-block"><em>** {l s='If Hotel\'s country is not present in country list then import that country from' mod='hotelreservationsystem'}<a href="{$link->getAdminLink('AdminLocalization')|escape:'html':'UTF-8'}"> <strong>{l s='Localization' mod='hotelreservationsystem'}</strong> </a>{l s='tab.' mod='hotelreservationsystem'}</em></div>
+						</div>
+					</div>
+					<div class="form-group hotel_state_dv" {if !$state_var}style="display:none;"{/if}>
+						<label class="control-label col-sm-3 required hotel_state_lbl" for="hotel_state" {if !$state_var}style="display:none;"{/if}>{l s='State :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<div style="width: 195px;">
+								<select class="form-control" name="hotel_state" id="hotel_state">
+								{if is_array($state_var) && count($state_var)}
+									{foreach $state_var as $state}
+										<option value="{$state['id_state']}" {if (isset($smarty.post.hotel_state) && $smarty.post.hotel_state == $state['id_state']) || (isset($edit) && $address_info['id_state'] == $state['id_state'])}selected{/if}> {$state['name']}</option>
+									{/foreach}
+								{/if}
+								</select>
+							</div>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3 required" for="hotel_city">{l s='City :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input class="form-control" type="" data-validate="" id="hotel_city" name="hotel_city" value="{if isset($smarty.post.hotel_city)}{$smarty.post.hotel_city|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$address_info.city|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3 required" for="hotel_postal_code">{l s='Zip Code :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input class="form-control" type="" data-validate="" id="hotel_postal_code" name="hotel_postal_code" value="{if isset($smarty.post.hotel_postal_code)}{$smarty.post.hotel_postal_code|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$address_info.postcode|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3" for="loclatitude">{l s='Latitude :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input class="form-control" type="text" id="loclatitude" name="loclatitude" value="{if isset($smarty.post.loclatitude)}{$smarty.post.loclatitude|escape:'htmlall':'UTF-8'}{elseif isset($edit) && $hotel_info.latitude != 0}{$hotel_info.latitude|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="control-label col-sm-3" for="loclongitude">{l s='Longitude :' mod='hotelreservationsystem'}</label>
+						<div class="col-sm-6">
+							<input class="form-control" type="text" id="loclongitude" name="loclongitude" value="{if isset($smarty.post.loclongitude)}{$smarty.post.loclongitude|escape:'htmlall':'UTF-8'}{elseif isset($edit) && $hotel_info.longitude != 0}{$hotel_info.longitude|escape:'htmlall':'UTF-8'}{/if}" />
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label">
+							{l s='Policies :' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="policies" value="policies_`$language.id_lang`"}
+								<div id="policies_div_{$language.id_lang}" class="wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if}>
+									<textarea
+									name="policies_{$language.id_lang}"
+									id="policies_{$language.id_lang}"
+									cols="2" rows="3"
+									class="wk_tinymce form-control">{if isset($smarty.post.$policies)}{$smarty.post.$policies|escape:'htmlall':'UTF-8'}{elseif isset($edit)}{$hotel_info.policies[{$language.id_lang}]|escape:'htmlall':'UTF-8'}{/if}</textarea>
+								</div>
+							{/foreach}
+						</div>
+					</div>
+					{if isset($enabledDisplayMap) && $enabledDisplayMap}
+						<div class="form-group">
+							<label class="col-sm-3 control-label">{l s='Map:' mod='hotelreservationsystem'}</label>
+							<div class="col-sm-6" id="googleMapContainer">
+								<input type="hidden" id="locformatedAddr" name="locformatedAddr" value="{if isset($edit)}{$hotel_info.map_formated_address}{/if}" />
+								<input type="hidden" id="googleInputField" name="googleInputField" value="{if isset($edit)}{$hotel_info.map_input_text}{/if}" />
+								<div id="pac-input" class="controls" type="text"></div>
+								<div id="map"></div>
+							</div>
+						</div>
+					{/if}
+
+					{hook h='displayAdminAddHotelFormInformationTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				<div class="tab-pane" id="hotel-seo">
+					{hook h='displayAdminAddHotelFormSeoTabBefore' id_hotel=$hook_arg_id_hotel}
+					<div class="form-group">
+						<label class="col-sm-3 control-label required" for="link_rewrite" >
+							{l s='Friendly URL :' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="link_rewrite" value="link_rewrite_`$language.id_lang`"}
+								<input type="text"
+								id="link_rewrite_{$language.id_lang}"
+								name="link_rewrite_{$language.id_lang}"
+								value="{if isset($smarty.post.$link_rewrite)}{$smarty.post.$link_rewrite|escape:'htmlall':'UTF-8'}{elseif isset($edit) && isset($link_rewrite_info[$language.id_lang])}{$link_rewrite_info[$language.id_lang]|escape:'htmlall':'UTF-8'}{/if}"
+								class="form-control wk_text_field_all wk_text_field_{$language.id_lang}"
+								maxlength="128"
+								{if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if} />
+							{/foreach}
+						</div>
+						<div class="col-lg-2">
+							<button type="button" class="btn btn-default" onmousedown="updateFriendlyURLByName();"><i class="icon-random"></i> {l s='Generate'}</button>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label" for="meta_title" >
+							{l s='Meta title:' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+						{foreach from=$languages item=language}
+							{assign var="meta_title" value="meta_title_`$language.id_lang`"}
+							<div class="input-group wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if}>
+								<span id="meta_title_{$language.id_lang}_counter" class="input-group-addon">
+									<span class="text-count-down">128</span>
+								</span>
+								<input type="text"
+								id="meta_title_{$language.id_lang}"
+								name="meta_title_{$language.id_lang}"
+								value="{if isset($smarty.post.$meta_title)}{$smarty.post.$meta_title|truncate:128:'':true|escape:'htmlall':'UTF-8'}{elseif isset($edit) && isset($meta_title_info[$language.id_lang])}{$meta_title_info[$language.id_lang]|truncate:128:'':true|escape:'htmlall':'UTF-8'}{/if}"
+								class="form-control"
+								maxlength="128"
+								data-maxchar="128" />
+							</div>
+						{/foreach}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label" for="meta_title" >
+							{l s='Meta description:' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								{assign var="meta_description" value="meta_description_`$language.id_lang`"}
+								<div class="input-group wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if}>
+									<span id="meta_description_{$language.id_lang}_counter" class="input-group-addon">
+										<span class="text-count-down">255</span>
+									</span>
+									<textarea
+									id="meta_description_{$language.id_lang}"
+									name="meta_description_{$language.id_lang}"
+									class="form-control textarea-autosize"
+									rows="1"
+									maxlength="255"
+									data-maxchar="255">{if isset($smarty.post.$meta_description)}{$smarty.post.$meta_description|truncate:255:'':true|escape:'htmlall':'UTF-8'}{elseif isset($edit) && isset($meta_description_info[$language.id_lang])}{$meta_description_info[$language.id_lang]|truncate:255:'':true|escape:'htmlall':'UTF-8'}{/if}</textarea>
+								</div>
+							{/foreach}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-sm-3 control-label" for="meta_title" >
+							{l s='Meta keywords:' mod='hotelreservationsystem'}
+							{include file="../../../_partials/htl-form-fields-flag.tpl"}
+						</label>
+						<div class="col-lg-6">
+							{foreach from=$languages item=language}
+								<div class="wk_text_field_all wk_text_field_{$language.id_lang}" {if $currentLang.id_lang != $language.id_lang}style="display:none;"{/if} >
+									{assign var="meta_keywords" value="meta_keywords_`$language.id_lang`"}
+									<script type="text/javascript">
+										$().ready(function () {
+											var input_id = 'meta_keywords_{$language.id_lang}';
+											$("#"+input_id).tagify({ delimiters: [13,44], addTagPrompt: "{l s='Add tag' mod='hotelreservationsystem' js=1}"});
+											$("#htl_branch_info_form").submit( function() {
+												$('#'+input_id).val($('#'+input_id).tagify('serialize'));
+											});
+										});
+									</script>
+									<input type="text"
+									id="meta_keywords_{$language.id_lang}"
+									name="meta_keywords_{$language.id_lang}"
+									value="{if isset($smarty.post.$meta_keywords)}{$smarty.post.$meta_keywords|escape:'htmlall':'UTF-8'}{elseif isset($edit) && isset($meta_keywords_info[$language.id_lang])}{$meta_keywords_info[$language.id_lang]|escape:'htmlall':'UTF-8'}{/if}"
+									class="form-control tagify"
+									maxlength="225">
+								</div>
+							{/foreach}
+						</div>
+					</div>
+					{include file="seo_preview.tpl"
+						languages = $languages
+						preview_link = $rewrite_url|default:''
+						show_label_tooltip = false
+						show_flag = true
+						inputs = [
+    						'meta_title' => $meta_title_info|default:'',
+    						'meta_description' => $meta_description_info|default:'',
+    						'link_rewrite' => $link_rewrite_info|default:'',
+							'meta_keywords' => $meta_keywords_info|default:'',
+							'name' => $hotel_info.hotel_name|default:'',
+							'description_short' => $hotel_info.short_description|default:''
+						]
+					}
+					{hook h='displayAdminAddHotelFormSeoTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				<div class="tab-pane" id="hotel-images">
+					{hook h='displayAdminAddHotelFormImagesTabBefore' id_hotel=$hook_arg_id_hotel}
+
+					{if isset($hotel_info.id) && $hotel_info.id}
+						<div class="row">
+							<div class="col-sm-12 text-right">
+								<a href="{$link->getAdminLink('AdminHotelImageCategory')|escape:'html':'UTF-8'}" class="btn btn-default">
+									<i class="icon-plus-sign"></i> {l s='ADD CATEGORY' mod='hotelreservationsystem'}
+								</a>
+								<button type="button" class="btn btn-primary" id="open-add-hotel-images-modal">
+									<i class="icon-plus-sign"></i> {l s='Add images' mod='hotelreservationsystem'}
+								</button>
+							</div>
+							<div class="col-sm-12">
+								<hr>
+								{include file="../../_partials/htl-images-list.tpl"}
+							</div>
+						</div>
+					{else}
+						<div class="alert alert-warning">
+							{l s='Please save property information before saving property images.' mod='hotelreservationsystem'}
+						</div>
+					{/if}
+
+					{hook h='displayAdminAddHotelFormImagesTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				<div class="tab-pane" id="hotel-booking-restrictions">
+					{hook h='displayAdminAddHotelFormRestrictionsTabBefore' id_hotel=$hook_arg_id_hotel}
+
+					{if isset($hotel_info.id) && $hotel_info.id}
+						<div class="form-group">
+							<label class="control-label col-lg-3">
+								<span>{l s='Use Global Maximum checkout offset:' mod='hotelreservationsystem'}</span>
+							</label>
+							<div class="col-lg-6">
+								<span class="switch prestashop-switch fixed-width-lg">
+									<input type="radio" {if isset($smarty.post.enable_use_global_max_checkout_offset)} {if $smarty.post.enable_use_global_max_checkout_offset} checked="checked"{/if} {elseif isset($edit) && isset($order_restrict_date_info.use_global_max_checkout_offset) && $order_restrict_date_info.use_global_max_checkout_offset} checked="checked" {else if isset($order_restrict_date_info) && !$order_restrict_date_info} checked="checked" {/if} value="1" id="enable_use_global_max_checkout_offset_on" name="enable_use_global_max_checkout_offset">
+									<label for="enable_use_global_max_checkout_offset_on">{l s='Yes' mod='hotelreservationsystem'}</label>
+									<input type="radio" {if isset($smarty.post.enable_use_global_max_checkout_offset)} {if !$smarty.post.enable_use_global_max_checkout_offset} checked="checked"{/if} {elseif isset($edit) && isset($order_restrict_date_info.use_global_max_checkout_offset) && !$order_restrict_date_info.use_global_max_checkout_offset} checked="checked" {/if} value="0" id="enable_use_global_max_checkout_offset_off" name="enable_use_global_max_checkout_offset">
+									<label for="enable_use_global_max_checkout_offset_off">{l s='No' mod='hotelreservationsystem'}</label>
+									<a class="slide-button btn"></a>
+								</span>
+								<div class="help-block">{l s='Global Maximum checkout offset:' mod='hotelreservationsystem'} {$PS_MAX_CHECKOUT_OFFSET}</div>
+							</div>
+						</div>
+						<div class="form-group" {if isset($smarty.post.enable_use_global_max_checkout_offset)} {if !$smarty.post.enable_use_global_max_checkout_offset} style="display:block;" {else} style="display:none;" {/if} {elseif isset($order_restrict_date_info.use_global_max_checkout_offset) && !$order_restrict_date_info.use_global_max_checkout_offset} style="display:block;" {else} style="display:none;" {/if}>
+							<label class="control-label col-sm-3 required" for="max_checkout_offset">{l s='Maximum checkout offset :' mod='hotelreservationsystem'}</label>
+							<div class="col-sm-2">
+								<input type="text" class="form-control" id="max_checkout_offset" name="max_checkout_offset" value="{if isset($smarty.post.max_checkout_offset)}{$smarty.post.max_checkout_offset|escape:'htmlall':'UTF-8'}{elseif isset($order_restrict_date_info.max_checkout_offset)}{$order_restrict_date_info.max_checkout_offset|escape:'htmlall':'UTF-8'}{/if}" />
+							</div>
+						</div>
+						<div class="form-group">
+							<label class="control-label col-lg-3">
+								<span>{l s='Use Global minimum booking offset :' mod='hotelreservationsystem'}</span>
+							</label>
+							<div class="col-lg-6">
+								<span class="switch prestashop-switch fixed-width-lg">
+									<input type="radio" {if isset($smarty.post.enable_use_global_min_booking_offset)} {if $smarty.post.enable_use_global_min_booking_offset} checked="checked" {/if} {elseif isset($edit) && isset($order_restrict_date_info.use_global_min_booking_offset) && $order_restrict_date_info.use_global_min_booking_offset} checked="checked" {else if isset($order_restrict_date_info) && !$order_restrict_date_info} checked="checked" {/if} value="1" id="enable_use_global_min_booking_offset_on" name="enable_use_global_min_booking_offset">
+									<label for="enable_use_global_min_booking_offset_on">{l s='Yes' mod='hotelreservationsystem'}</label>
+									<input type="radio" {if isset($smarty.post.enable_use_global_min_booking_offset)} {if !$smarty.post.enable_use_global_min_booking_offset} checked="checked" {/if} {elseif isset($edit) && isset($order_restrict_date_info.use_global_min_booking_offset) && !$order_restrict_date_info.use_global_min_booking_offset} checked="checked" {/if} value="0" id="enable_use_global_min_booking_offset_off" name="enable_use_global_min_booking_offset">
+									<label for="enable_use_global_min_booking_offset_off">{l s='No' mod='hotelreservationsystem'}</label>
+									<a class="slide-button btn"></a>
+								</span>
+								<div class="help-block">{l s='Global minimum booking offset :' mod='hotelreservationsystem'} {$PS_MIN_BOOKING_OFFSET}</div>
+							</div>
+						</div>
+						<div class="form-group" {if isset($smarty.post.enable_use_global_min_booking_offset)} {if !$smarty.post.enable_use_global_min_booking_offset} style="display:block;" {else} style="display:none;" {/if} {else if isset($edit) && isset($order_restrict_date_info.use_global_min_booking_offset) && !$order_restrict_date_info.use_global_min_booking_offset} style="display:block;" {else} style="display:none;" {/if}>
+							<label class="control-label col-sm-3 required" for="min_booking_offset">{l s='Minimum booking offset :' mod='hotelreservationsystem'}</label>
+							<div class="col-sm-2">
+								<input type="text" class="form-control" id="min_booking_offset" name="min_booking_offset" value="{if isset($smarty.post.min_booking_offset)}{$smarty.post.min_booking_offset|escape:'html':'UTF-8'}{elseif isset($edit) && isset($order_restrict_date_info.min_booking_offset)}{$order_restrict_date_info.min_booking_offset|escape:'htmlall':'UTF-8'}{/if}" />
+							</div>
+							<div class="col-lg-9 col-lg-offset-3">
+								<div class="help-block">{l s='Set to 0 to disable this feature.' mod='hotelreservationsystem'}</div>
+							</div>
+						</div>
+					{else}
+						<div class="alert alert-warning">
+							{l s='Please save the property information before saving the property booking restrictions.' mod='hotelreservationsystem'}
+						</div>
+					{/if}
+
+					{hook h='displayAdminAddHotelFormRestrictionsTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				<div class="tab-pane" id="hotel-refund-policies">
+					{hook h='displayAdminAddHotelFormRefundPoliciesTabBefore' id_hotel=$hook_arg_id_hotel}
+
+					{if isset($hotel_info.id) && $hotel_info.id}
+						{if isset($WK_ORDER_REFUND_ALLOWED) && !$WK_ORDER_REFUND_ALLOWED}
+							<div class="alert alert-info">
+								{l s='To enable hotel-wise refunds, activate order refunds in' mod='hotelreservationsystem'} <a href="{$link->getAdminLink('AdminOrderRefundRules')|escape:'html':'UTF-8'}" target="_blank">{l s='Manage Order Refund Rules' mod='hotelreservationsystem'}</a>
+							</div>
+						{/if}
+						<div class="form-group">
+							<label for="active_refund" class="control-label col-sm-5">
+								<span title="" data-toggle="tooltip" class="label-tooltip" data-original-title='{l s='Enable, if you want to enable refund for this hotel.' mod='hotelreservationsystem'}'>{l s='Enable refund' mod='hotelreservationsystem'}</span>
+							</label>
+							<div class="col-sm-7">
+								<span class="switch prestashop-switch fixed-width-lg">
+									<input type="radio" value="1" id="active_refund_on" name="active_refund" {if isset($WK_ORDER_REFUND_ALLOWED) && !$WK_ORDER_REFUND_ALLOWED} disabled="disabled" {elseif isset($smarty.post.active_refund)}{if $smarty.post.active_refund}checked="checked"{/if}{elseif isset($hotel_info) && $hotel_info.active_refund}checked="checked"{/if}>
+									<label for="active_refund_on">{l s='Yes' mod='hotelreservationsystem'}</label>
+									<input type="radio" value="0" id="active_refund_off" name="active_refund" {if isset($WK_ORDER_REFUND_ALLOWED) && !$WK_ORDER_REFUND_ALLOWED} disabled="disabled" checked="checked" {elseif isset($smarty.post.active_refund)}{if !$smarty.post.active_refund}checked="checked"{/if}{elseif !isset($hotel_info)}checked="checked"{elseif isset($hotel_info) && !$hotel_info.active_refund}checked="checked"{/if}>
+									<label for="active_refund_off">{l s='No' mod='hotelreservationsystem'}</label>
+									<a class="slide-button btn"></a>
+								</span>
+							</div>
+						</div>
+						<div class="refund_rules_container" {if isset($smarty.post.active_refund)}{if !$smarty.post.active_refund}style="display:none;"{/if}{elseif !isset($hotel_info.active_refund) || !$hotel_info.active_refund}style="display:none;"{/if}>
+							{if isset($allRefundRules) && $allRefundRules}
+								<hr>
+								<div class="table-responsive">
+									<table class="table wk-htl-datatable">
+										<thead>
+											<tr>
+												<th></th>
+												<th></th>
+												<th>{l s='Id' mod='hotelreservationsystem'}</th>
+												<th>{l s='Name' mod='hotelreservationsystem'}</th>
+												<th>{l s='Full payment charges' mod='hotelreservationsystem'}</th>
+												<th>{l s='Advance payment charges' mod='hotelreservationsystem'}</th>
+												<th>{l s='Days before check-in' mod='hotelreservationsystem'}</th>
+											</tr>
+										</thead>
+										<tbody id="slides">
+											{foreach from=$allRefundRules item=refundRule}
+												<tr id="slides_{$refundRule.id_refund_rule}">
+													<td>
+														<i class="icon-arrows "></i>
+													</td>
+													<td>
+														<p class="checkbox">
+															<label><input name="htl_refund_rules[]" type="checkbox" class="checkbox" value="{$refundRule.id_refund_rule}" {if isset($hotelRefundRules) && ($refundRule.id_refund_rule|in_array:$hotelRefundRules)}checked{/if} /></label>
+														</p>
+													</td>
+													<td>
+														{$refundRule.id_refund_rule|escape:'html':'UTF-8'} <a target="blank" href="{$link->getAdminLink('AdminOrderRefundRules')|escape:'html':'UTF-8'}&amp;id_refund_rule={$refundRule.id_refund_rule|escape:'html':'UTF-8'}&amp;updatehtl_order_refund_rules"><i class="icon-external-link-sign"></i></a>
+													</td>
+													<td>
+														{$refundRule['name']|escape:'html':'UTF-8'}
+													</td>
+													<td>
+														{if $refundRule['payment_type'] == $WK_REFUND_RULE_PAYMENT_TYPE_PERCENTAGE}
+															{$refundRule['deduction_value_full_pay']|escape:'html':'UTF-8'} %
+														{else}
+															{displayPrice price=$refundRule['deduction_value_full_pay'] currency=$defaultCurrency}
+														{/if}
+													</td>
+													<td>
+														{if $refundRule['payment_type'] == $WK_REFUND_RULE_PAYMENT_TYPE_PERCENTAGE}
+															{$refundRule['deduction_value_adv_pay']|escape:'html':'UTF-8'} %
+														{else}
+															{displayPrice price=$refundRule['deduction_value_adv_pay'] currency=$defaultCurrency}
+														{/if}
+													</td>
+													<td>{$refundRule['days']|escape:'html':'UTF-8'} {l s='days' mod='hotelreservationsystem'}</td>
+												</tr>
+											{/foreach}
+										</tbody>
+									</table>
+								</div>
+							{else}
+								<div class="alert alert-warning">
+									{l s='No refund rules are created yet.' mod='hotelreservationsystem'} {l s='You can create refund rules by visiting ' mod='hotelreservationsystem'} <a target="_blank" href="{$link->getAdminLink('AdminOrderRefundRules')}">{l s='create refund rules' mod='hotelreservationsystem'}</a>
+								</div>
+							{/if}
+						</div>
+					{else}
+						<div class="alert alert-warning">
+							{l s='Please save property information before saving refund policy options.' mod='hotelreservationsystem'}
+						</div>
+					{/if}
+
+					{hook h='displayAdminAddHotelFormRefundPoliciesTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				<div class="tab-pane" id="hotel-features">
+					{hook h='displayAdminAddHotelFormFeaturesTabBefore' id_hotel=$hook_arg_id_hotel}
+					<div class="alert alert-info">
+						<p>{l s='If you want to add a new amenity, please use the following link.'}
+							<a href="{$link->getAdminLink('AdminHotelAmenities')|escape:'html':'UTF-8'}" class="btn btn-link button" target="_blank">
+								<i class="icon-plus-sign"></i> {l s='Manage amenities'} <i class="icon-external-link-sign"></i>
+							</a>
+						</p>
+					</div>
+					{if isset($hotel_amenity_tree)}
+						<div class="form-group">
+							<label for="hotel_amenity" class="control-label col-sm-3">
+								<span title="" data-toggle="tooltip" class="label-tooltip" data-original-title='{l s='Select amenities for this hotel.' mod='hotelreservationsystem'}'>{l s='Select amenities' mod='hotelreservationsystem'}</span>
+							</label>
+							<div class="col-xs-7 hotel_amenities_tree">
+								{$hotel_amenity_tree}
+							</div>
+						</div>
+
+						<div class="form-group">
+							<label class="control-label col-sm-3">
+								<span title="" data-toggle="tooltip" class="label-tooltip" data-original-title='{l s='Select which of the chosen amenities should be featured for this hotel.' mod='hotelreservationsystem'}'>{l s='Featured amenities' mod='hotelreservationsystem'}</span>
+							</label>
+							<div class="col-sm-7">
+								<select name="hotel_featured_amenities[]" id="htl_featured_amenities" class="form-control" multiple>
+								</select>
+							</div>
+						</div>
+
+						<script type="text/javascript">
+						var htlFeaturedAmenityIds = {if isset($hotel_featured_amenity_ids)}{$hotel_featured_amenity_ids|json_encode}{else}[]{/if};
+						</script>
+					{elseif isset($hotel_info.id) && $hotel_info.id}
+						<div class="alert alert-warning">
+							{l s='No amenities created yet.' mod='hotelreservationsystem'} {l s='You can create amenities by visiting ' mod='hotelreservationsystem'} <a target="_blank" href="{$link->getAdminLink('AdminHotelAmenities')}">{l s='manage hotel amenities.' mod='hotelreservationsystem'}</a>
+						</div>
+					{else}
+						<div class="alert alert-warning">
+							{l s='Please save property information before assigning property amenities.' mod='hotelreservationsystem'}
+						</div>
+					{/if}
+
+					{hook h='displayAdminAddHotelFormFeaturesTabAfter' id_hotel=$hook_arg_id_hotel}
+				</div>
+				{if isset($use_tourism_tax) && $use_tourism_tax}
+				<div class="tab-pane" id="hotel-tourism-tax">
+					<div class="form-group">
+						<label class="control-label col-lg-3">
+							{l s='Collection Type' mod='hotelreservationsystem'}
+						</label>
+						<div class="col-lg-4">
+							<select name="tourism_tax_collection_type" id="tourism_tax_collection_type">
+								<option value="0" {if isset($tourism_tax_collection_type) && $tourism_tax_collection_type == 0}selected="selected"{/if}>
+									{l s='At time of booking' mod='hotelreservationsystem'}
+								</option>
+								<option value="1" {if isset($tourism_tax_collection_type) && $tourism_tax_collection_type == 1}selected="selected"{/if}>
+									{l s='At time of arrival' mod='hotelreservationsystem'}
+								</option>
+							</select>
+						</div>
+					</div>
+				</div>
+				{/if}
+				{hook h='displayAdminAddHotelFormTabContent' id_hotel=$hook_arg_id_hotel}
+			</div>
+		</div>
+
+		{hook h='displayAdminAddHotelFormBottom' id_hotel=$hook_arg_id_hotel}
+
+		<div class="panel-footer">
+			<a href="{$link->getAdminLink('AdminAddHotel')|escape:'html':'UTF-8'}" class="btn btn-default">
+				<i class="process-icon-cancel"></i>{l s='Cancel' mod='hotelreservationsystem'}
+			</a>
+			<button type="submit" name="submitAddhotel_branch_info" class="btn btn-default pull-right">
+				<i class="process-icon-save"></i> {l s='Save' mod='hotelreservationsystem'}
+			</button>
+			<button type="submit" name="submitAdd{$table|escape:'html':'UTF-8'}AndStay" class="btn btn-default pull-right">
+				<i class="process-icon-save"></i> {l s='Save and stay' mod='hotelreservationsystem'}
+			</button>
+		</div>
+	</form>
+</div>
+
+	{strip}
+		{addJsDef adminHotelCtrlUrl = $link->getAdminlink('AdminAddHotel')}
+			{addJsDefL name=imgSelectErrorMsg}{l s='Please select at least one image before uploading.' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+			{addJsDefL name=bulkUpdateSelectErrorMsg}{l s='Please select at least one image to update.' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+			{addJsDefL name=bulkDeleteSelectErrorMsg}{l s='Please select at least one image to delete.' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+			{addJsDefL name=imgUploadSuccessMsg}{l s='Image Successfully Uploaded' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+			{addJsDefL name=imgUploadErrorMsg}{l s='Something went wrong while uploading images. Please try again later !!' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+			{addJsDefL name=imgUpdateSuccessMsg}{l s='Image updated successfully.' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+
+	{addJsDefL name=coverImgSuccessMsg}{l s='Cover image changed successfully' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+	{addJsDefL name=coverImgErrorMsg}{l s='Error while changing cover image' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+
+	{addJsDefL name=deleteImgSuccessMsg}{l s='Image deleted successfully' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+	{addJsDefL name=deleteImgErrorMsg}{l s='Something went wrong while deleting image. Please try again later !!' js=1 mod='hotelreservationsystem'}{/addJsDefL}
+
+	{addJsDef enabledDisplayMap = $enabledDisplayMap}
+	{addJsDef defaultCountry = $defaultCountry}
+	{addJsDef statebycountryurl = $link->getAdminLink('AdminAddHotel')}
+{/strip}
+
+{block name=script}
+<script type="text/javascript">
+	var id_language = {$defaultFormLanguage|intval};
+	allowEmployeeFormLang = {$allowEmployeeFormLang|intval};
+	var ps_force_friendly_product = false;
+
+	// for tiny mce setup
+	var iso = "{$iso|escape:'htmlall':'UTF-8'}";
+	var pathCSS = "{$smarty.const._THEME_CSS_DIR_|escape:'htmlall':'UTF-8'}";
+	var ad = "{$ad|escape:'htmlall':'UTF-8'}";
+	$(document).ready(function(){
+		{block name="autoload_tinyMCE"}
+			tinySetup({
+				editor_selector :"wk_tinymce",
+				width : 700
+			});
+		{/block}
+
+		{foreach from=$languages item=language}
+			countDown($("#meta_title_{$language.id_lang}"), $("#meta_title_{$language.id_lang}_counter"));
+			countDown($("#meta_description_{$language.id_lang}"), $("#meta_description_{$language.id_lang}_counter"));
+		{/foreach}
+
+		$('a[href="#hotel-seo"]').on('shown.bs.tab', function() {
+			$(window).trigger('resize.autosize');
+		});
+
+		// handle case where SEO tab is already active on load
+		if ($('#hotel-seo').hasClass('active')) {
+			$(window).trigger('resize.autosize');
+		}
+
+		// Trigger autosize width recalculation when language is switched
+		$(document).on('wk.lang.changed', function(e, idLang) {
+			$(window).trigger('resize.autosize');
+		});
+
+		// Restore active tab from controller redirect param
+		var _htlActiveTab = '{if !empty($smarty.get.htl_active_tab)}{$smarty.get.htl_active_tab|escape:'javascript':'UTF-8'}{/if}';
+		if (/^#[\w-]+$/.test(_htlActiveTab) && $('a[href="' + _htlActiveTab + '"]').length) {
+			$('a[href="' + _htlActiveTab + '"]').tab('show');
+		}
+
+		// Keep hidden input in sync so active tab survives form submission
+		$('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+			$('#htl_active_tab').val($(e.target).attr('href'));
+		});
+	});
+	$(".textarea-autosize").autosize();
+	// After full page load, reinit visible textareas so they start at the correct height
+	$(window).on('load', function() {
+		$(".textarea-autosize:visible").each(function() {
+			var $ta = $(this), val = $ta.val();
+			$ta.val('').trigger('autosize.destroy').removeData('autosize').autosize();
+			if (val) { $ta.val(val).trigger('input'); }
+		});
+	});
+</script>
+{/block}

@@ -1,0 +1,22 @@
+-- Migration 001 rollback - narrow the password columns back to varchar(32).
+--
+-- DESTRUCTIVE. Safe ONLY if no row holds a bcrypt hash or any value longer
+-- than 32 characters. Run this guard FIRST:
+--
+--   SELECT 'employee' AS src, COUNT(*) AS would_be_destroyed
+--     FROM qlo_employee WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32
+--   UNION ALL
+--   SELECT 'customer', COUNT(*)
+--     FROM qlo_customer  WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32;
+--
+-- If either count is non-zero, STOP. Narrowing would truncate those hashes and
+-- permanently lock the affected accounts out, exactly the failure migration
+-- 001 exists to prevent.
+--
+-- The ALTER statements are left COMMENTED OUT on purpose so that running this
+-- file can never destroy passwords by accident. Uncomment both only after the
+-- guard above returned zeros, and only if you genuinely need the legacy width
+-- back (for example to restore a pre-migration backup consistently).
+
+-- ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(32) NOT NULL;
+-- ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(32) NOT NULL;
