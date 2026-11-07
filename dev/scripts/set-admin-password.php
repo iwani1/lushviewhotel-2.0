@@ -42,7 +42,11 @@ if (!is_file($settings)) {
 // and gives us the credentials and the cookie key without parsing anything.
 require_once $settings;
 
-$args = array_values(array_filter($argv, function ($a) { return $a !== $argv[0]; }));
+// array_slice() drops the script name here, in the global scope. Do NOT try to
+// compare against $argv[0] inside the closure below: $argv is not a
+// superglobal, so it is undefined within callback scope and each element
+// raises "Undefined variable $argv" / "array offset on null".
+$args = array_slice($argv, 1);
 $asCustomer = in_array('--customer', $args, true);
 $args = array_values(array_filter($args, function ($a) { return $a !== '--customer'; }));
 
@@ -61,14 +65,27 @@ if (!in_array(strtolower($dbServer), $allowed, true)) {
        . "       This tool is for the local development database only.\n");
 }
 
-$dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb3', $dbServer, $dbName);
+// The charset name goes to mysqlnd, not to the server, and mysqlnd's charset
+// table does not contain the server-side alias "utf8mb3": asking for it fails
+// the handshake with SQLSTATE[HY000] [2019] Unknown character set before any
+// query runs. "utf8" is the name mysqlnd knows, and on MariaDB it IS utf8mb3,
+// which is what every table in this schema uses. Honour _DB_CHARSET_ from
+// settings.inc.php when present, but fold the alias back down.
+$charset = (defined('_DB_CHARSET_') && _DB_CHARSET_ !== '') ? _DB_CHARSET_ : 'utf8';
+if (strtolower($charset) === 'utf8mb3') {
+    $charset = 'utf8';
+}
+$dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $dbServer, $dbName, $charset);
 try {
     $pdo = new PDO($dsn, _DB_USER_, _DB_PASSWD_, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ]);
 } catch (PDOException $e) {
     exit("error: could not connect to the database: " . $e->getMessage() . "\n"
-       . "       Is the container running?  docker compose up -d\n");
+       . "       Two common causes: the containers are not running\n"
+       . "         (podman-compose up -d   or   docker compose up -d),\n"
+       . "       or settings.inc.php points at a database that does not exist yet\n"
+       . "         (dev/scripts/use-db.sh fresh   puts you back on the clean one).\n");
 }
 
 // --list: show the accounts that exist, so you know which email to reset.
@@ -90,8 +107,16 @@ if (in_array('--list', $args, true)) {
 }
 
 if (count($args) < 2) {
-    exit("usage: php dev/scripts/set-admin-password.php <email> <new-password> [--customer]\n"
-       . "       php dev/scripts/set-admin-password.php --list\n");
+    exit("usage: set-admin-password.php EMAIL NEW-PASSWORD [--customer]\n"
+       . "       set-admin-password.php --list\n"
+       . "\n"
+       . "example, from the repo root on the host:\n"
+       . "  podman-compose exec app php dev/scripts/set-admin-password.php --list\n"
+       . "  podman-compose exec app php dev/scripts/set-admin-password.php you@example.com 'LocalDev-2026!'\n"
+       . "\n"
+       . "note: substitute your REAL address and password. Do not paste literal\n"
+       . "      <angle-bracket placeholders> - a leading '<' is a shell redirect\n"
+       . "      and fails with 'No such file or directory'.\n");
 }
 
 list($email, $password) = $args;
