@@ -35,15 +35,26 @@ class LvhBranding extends Module
     const KEY_EMAIL       = 'LVH_BRAND_EMAIL';
     const KEY_PHONE       = 'LVH_BRAND_PHONE';
     const KEY_ADDRESS     = 'LVH_BRAND_ADDRESS';
-    const KEY_FACEBOOK    = 'LVH_BRAND_FACEBOOK';
-    const KEY_X           = 'LVH_BRAND_X';
     const KEY_THEME_COLOR = 'LVH_BRAND_THEME_COLOR';
+
+    /**
+     * Core keys to fall back on when an LVH key is empty, so this module never
+     * needs a second copy of data the core already owns. Social links are NOT
+     * here on purpose: the blocksocial module (BLOCKSOCIAL_FACEBOOK, _TWITTER,
+     * _INSTAGRAM, ...) already renders them in the footer.
+     *
+     * @var array
+     */
+    protected static $coreFallback = array(
+        'NAME'  => 'PS_SHOP_NAME',
+        'EMAIL' => 'PS_SHOP_EMAIL',
+    );
 
     public function __construct()
     {
         $this->name = 'lvhbranding';
         $this->tab = 'administration';
-        $this->version = '0.1.0';
+        $this->version = '0.2.0';
         $this->author = 'Lush View Hotel';
         $this->bootstrap = true;
 
@@ -71,8 +82,6 @@ class LvhBranding extends Module
             self::KEY_EMAIL       => (string) Configuration::get('PS_SHOP_EMAIL'),
             self::KEY_PHONE       => '',
             self::KEY_ADDRESS     => '',
-            self::KEY_FACEBOOK    => '',
-            self::KEY_X           => '',
             self::KEY_THEME_COLOR => '#252525',
         );
         foreach ($defaults as $key => $value) {
@@ -89,9 +98,11 @@ class LvhBranding extends Module
         if (!parent::uninstall()) {
             return false;
         }
-        foreach (array(self::KEY_NAME, self::KEY_TAGLINE, self::KEY_EMAIL, self::KEY_PHONE,
-                     self::KEY_ADDRESS, self::KEY_FACEBOOK, self::KEY_X, self::KEY_THEME_COLOR) as $key) {
-            Configuration::deleteByName($key);
+        foreach (array_keys(self::$coreFallback + array(
+            'TAGLINE' => self::KEY_TAGLINE, 'PHONE' => self::KEY_PHONE,
+            'ADDRESS' => self::KEY_ADDRESS, 'THEME_COLOR' => self::KEY_THEME_COLOR,
+        )) as $short) {
+            Configuration::deleteByName('LVH_BRAND_' . $short);
         }
 
         return true;
@@ -109,7 +120,14 @@ class LvhBranding extends Module
     {
         $value = Configuration::get('LVH_BRAND_' . $short);
 
-        return ($value === false || $value === '') ? $default : (string) $value;
+        if ($value === false || $value === '') {
+            $core = isset(self::$coreFallback[$short])
+                ? Configuration::get(self::$coreFallback[$short])
+                : false;
+            $value = ($core === false) ? '' : (string) $core;
+        }
+
+        return ($value === '') ? $default : (string) $value;
     }
 
     public function hookDisplayHeader($params)
@@ -138,7 +156,7 @@ class LvhBranding extends Module
                 $output .= $this->displayError('The contact email address is not valid.');
             } else {
                 foreach (array(self::KEY_NAME, self::KEY_TAGLINE, self::KEY_EMAIL, self::KEY_PHONE,
-                             self::KEY_ADDRESS, self::KEY_FACEBOOK, self::KEY_X, self::KEY_THEME_COLOR) as $key) {
+                             self::KEY_ADDRESS, self::KEY_THEME_COLOR) as $key) {
                     Configuration::updateValue($key, (string) Tools::getValue($key));
                 }
                 $output .= $this->displayConfirmation('Brand settings saved.');
@@ -156,18 +174,27 @@ class LvhBranding extends Module
             self::KEY_EMAIL       => 'Contact email',
             self::KEY_PHONE       => 'Contact phone',
             self::KEY_ADDRESS     => 'Postal / street address',
-            self::KEY_FACEBOOK    => 'Facebook URL (optional)',
-            self::KEY_X           => 'X / Twitter URL (optional)',
             self::KEY_THEME_COLOR => 'Theme colour (hex, optional)',
         );
 
         $html  = '<div class="panel">';
         $html .= '<h3><i class="icon-star"></i> ' . $this->displayName . '</h3>';
-        $html .= '<p>These values are the single source of truth for every LVH module '
-               . '(emails, reports, guest messages). The header logo, shop name in mails '
-               . 'and PDFs come from the core settings under <strong>Preferences &gt; General</strong> '
-               . 'and <strong>Appearance</strong>; the front-page copy is CMS content under '
-               . '<strong>Preferences &gt; CMS</strong>. See docs/project/06-branding-plan.md.</p>';
+        $html .= '<p>Empty fields fall back to the core settings, so nothing is stored twice. '
+               . 'Where each brand surface actually lives:</p>'
+               . '<ul>'
+               . '<li><strong>Header logo, favicon, shop name</strong> (also the email From name, '
+               . 'email subject prefix, PDF header and the footer copyright): '
+               . 'Preferences &gt; General and Preferences &gt; Appearance.</li>'
+               . '<li><strong>Social icons in the footer</strong>: Modules &gt; Social network links '
+               . '(blocksocial), not this page.</li>'
+               . '<li><strong>Hotel phone and address</strong>: the hotel branch record under '
+               . 'Hotel Reservation System. The two fields here are only a convenience copy for '
+               . 'LVH emails and reports - fill them from the branch record, never separately.</li>'
+               . '<li><strong>Front-page copy, interior gallery names, amenities and features '
+               . 'blocks</strong>: Modules &gt; About Hotel Block / Hotel Features Block, and '
+               . 'Preferences &gt; CMS.</li>'
+               . '</ul>'
+               . '<p>Full surface map and the live-site audit: docs/project/06-branding-plan.md.</p>';
         $action = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
         $html .= '<form method="post" action="' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8') . '">';
         $html .= '<table class="table table-striped">';
