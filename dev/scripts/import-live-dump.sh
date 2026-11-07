@@ -21,7 +21,7 @@ cd "$(dirname "$0")/../.."
 
 TARGET_DB="qloapps_live"          # fixed on purpose
 ROOT_PW="qlo_root_dev_only"       # matches docker-compose.yml
-COMPOSE="docker compose"
+DB_CONTAINER="qlo-db"             # container_name in docker-compose.yml
 
 dump="${1:-}"
 if [ -z "$dump" ]; then
@@ -33,7 +33,8 @@ if [ ! -f "$dump" ]; then
     exit 1
 fi
 
-command -v docker >/dev/null 2>&1 || COMPOSE="podman compose"
+# The container engine is detected in step 2 by probing, not by guessing from
+# which binaries happen to exist. See the note there.
 
 echo "=== 1. Validating the dump before importing anything ==="
 head -c 4000 "$dump" | grep -q "phpMyAdmin SQL Dump" \
@@ -52,15 +53,33 @@ echo "    sha256            : $(sha256sum "$dump" | cut -d' ' -f1)"
 echo
 
 echo "=== 2. Confirming the database server is running ==="
-$COMPOSE ps --services --filter "status=running" 2>/dev/null | grep -qx db \
-    || { echo "error: the db container is not running. Start it with: docker compose up -d" >&2; exit 1; }
-echo "    db container is up."
+# Detect an engine that can ACTUALLY reach the db container instead of guessing
+# from installed binaries. Fedora ships a real docker binary with no compose
+# plugin and usually no running daemon, while this stack runs under Podman - so
+# "docker exists" proves nothing. Probing `exec` against the fixed container
+# name also sidesteps compose-CLI differences: podman-compose has no
+# `ps --services --filter`, and `exec -T` stdin handling varies by version,
+# whereas `<engine> exec -i <name>` is identical on both engines.
+ENGINE=""
+for cand in podman docker; do
+    if command -v "$cand" >/dev/null 2>&1 \
+       && "$cand" exec -i "$DB_CONTAINER" true >/dev/null 2>&1; then
+        ENGINE="$cand"
+        break
+    fi
+done
+if [ -z "$ENGINE" ]; then
+    echo "error: cannot reach the '$DB_CONTAINER' container with podman or docker." >&2
+    echo "       Is it running?  podman-compose up -d   (or: docker compose up -d)" >&2
+    exit 1
+fi
+echo "    db container is up (engine: $ENGINE)."
 echo
 
 echo "=== 3. Creating $TARGET_DB (fresh, empty) ==="
 # DROP + CREATE so re-running this script always gives a clean import rather
 # than layering rows on top of a previous attempt. Scoped to TARGET_DB only.
-$COMPOSE exec -T db mariadb -uroot -p"$ROOT_PW" <<SQL
+$ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" <<SQL
 DROP DATABASE IF EXISTS \`${TARGET_DB}\`;
 CREATE DATABASE \`${TARGET_DB}\` CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci;
 SQL
@@ -68,8 +87,8 @@ echo "    created."
 echo
 
 echo "=== 4. Importing (this takes a minute for a 16 MB dump) ==="
-$COMPOSE exec -T db mariadb -uroot -p"$ROOT_PW" "$TARGET_DB" < "$dump"
-imported=$($COMPOSE exec -T db mariadb -uroot -p"$ROOT_PW" -N -B \
+$ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" "$TARGET_DB" < "$dump"
+imported=$($ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" -N -B \
     -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${TARGET_DB}';")
 echo "    tables now in $TARGET_DB: $imported"
 echo
@@ -79,9 +98,9 @@ echo "=== 5. Applying migration 001 (widen password columns) ==="
 # bcrypt, which is 60 characters. See dev/migrations/001_*.up.sql for the full
 # reasoning. Without this, re-hashing on login silently fails (STRICT mode) or
 # truncates and locks the account out (non-strict mode).
-$COMPOSE exec -T db mariadb -uroot -p"$ROOT_PW" "$TARGET_DB" \
+$ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" "$TARGET_DB" \
     < dev/migrations/001_widen_password_columns.up.sql
-$COMPOSE exec -T db mariadb -uroot -p"$ROOT_PW" -N -B "$TARGET_DB" -e "
+$ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" -N -B "$TARGET_DB" -e "
     SELECT CONCAT('    ', TABLE_NAME, '.passwd is now varchar(', CHARACTER_MAXIMUM_LENGTH, ')')
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA='${TARGET_DB}'

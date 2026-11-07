@@ -351,6 +351,13 @@ because stale cache makes the switch look like it did nothing.
 
 ## 8. Everyday commands
 
+> **If you are on Podman (the Fedora path from §2.4), read this once.** Every command in this
+> document written as `docker compose exec …` becomes `podman-compose exec …`, and
+> `docker compose up|down|stop|logs` becomes `podman-compose up|down|stop|logs`. Everything
+> else — arguments, service names (`app`, `db`), paths — is identical. So
+> `docker compose exec app php …` is `podman-compose exec app php …` on your machine.
+> The helper scripts in `dev/scripts/` detect the engine themselves and need no substitution.
+
 ```bash
 docker compose up -d                # start
 docker compose stop                 # stop, keep everything
