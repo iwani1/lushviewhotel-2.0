@@ -42,6 +42,36 @@ if [ ! -f "$SETTINGS" ]; then
     exit 1
 fi
 
+# Preflight: verify the app's OWN credentials can open the target database
+# BEFORE rewriting settings. Switching to a database that was never created, or
+# never GRANTed to the app user, otherwise leaves the whole site throwing
+# access errors with nothing pointing at the cause. Skipped when no container
+# engine is reachable (containers stopped), so the switch still works offline.
+ENG=""
+for cand in podman docker; do
+    if command -v "$cand" >/dev/null 2>&1 \
+       && "$cand" exec -i qlo-db true >/dev/null 2>&1; then
+        ENG="$cand"
+        break
+    fi
+done
+if [ -n "$ENG" ]; then
+    u="$(grep -oP "(?<=_DB_USER_', ')[^']*" "$SETTINGS" 2>/dev/null || true)"
+    p="$(grep -oP "(?<=_DB_PASSWD_', ')[^']*" "$SETTINGS" 2>/dev/null || true)"
+    if [ -n "$u" ] && [ -n "$p" ] \
+       && ! "$ENG" exec -i qlo-db mariadb -u"$u" -p"$p" -e "USE \`$db\`;" >/dev/null 2>&1; then
+        echo "error: the app user '$u' cannot open database '$db' - not switching." >&2
+        if [ "$db" = "qloapps_live" ]; then
+            echo "       qloapps_live is created AND granted to '$u' by" >&2
+            echo "       dev/scripts/import-live-dump.sh. Run that first (it needs your" >&2
+            echo "       phpMyAdmin export of the live database), then switch." >&2
+        else
+            echo "       Check the containers are up and that the database exists." >&2
+        fi
+        exit 1
+    fi
+fi
+
 before="$(current)"
 sed -i "s/define('_DB_NAME_', '[^']*')/define('_DB_NAME_', '$db')/" "$SETTINGS"
 

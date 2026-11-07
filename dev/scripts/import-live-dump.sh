@@ -23,6 +23,15 @@ TARGET_DB="qloapps_live"          # fixed on purpose
 ROOT_PW="qlo_root_dev_only"       # matches docker-compose.yml
 DB_CONTAINER="qlo-db"             # container_name in docker-compose.yml
 
+# The application connects as the user defined in config/settings.inc.php -
+# the user the MariaDB container created from MARIADB_USER. The mariadb image
+# grants that user access to MARIADB_DATABASE (qloapps_fresh) ONLY, so a
+# database created here is invisible to the app until we GRANT it explicitly.
+# Without this the import "succeeds" and the site then fails with
+# SQLSTATE[HY000] [1044] Access denied for user 'qlo'@'%' the moment you switch.
+APP_USER="$(grep -oP "(?<=_DB_USER_', ')[^']*" config/settings.inc.php 2>/dev/null || true)"
+APP_USER="${APP_USER:-qlo}"
+
 dump="${1:-}"
 if [ -z "$dump" ]; then
     echo "usage: dev/scripts/import-live-dump.sh /path/to/live_db.sql" >&2
@@ -82,8 +91,10 @@ echo "=== 3. Creating $TARGET_DB (fresh, empty) ==="
 $ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" <<SQL
 DROP DATABASE IF EXISTS \`${TARGET_DB}\`;
 CREATE DATABASE \`${TARGET_DB}\` CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci;
+GRANT ALL PRIVILEGES ON \`${TARGET_DB}\`.* TO '${APP_USER}'@'%';
+FLUSH PRIVILEGES;
 SQL
-echo "    created."
+echo "    created, and ALL PRIVILEGES granted to '${APP_USER}'@'%'."
 echo
 
 echo "=== 4. Importing (this takes a minute for a 16 MB dump) ==="
