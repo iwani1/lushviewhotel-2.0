@@ -33,7 +33,21 @@
 -->
 <localizationPack name="Ghana">
   <currencies>
-    <currency name="Ghanaian cedi" iso_code="GHS" iso_code_num="936" sign="&#x20B5;" blank="1" format="1" decimals="2"/>
+    <!--
+      decimals is a BOOLEAN, not a digit count: classes/Currency.php:75 defines
+      it as TYPE_BOOL validated by Validate::isBool, i.e. /^(0|1)$/. It means
+      "does this currency display fractional digits at all", while *how many*
+      and where they sit is controlled by `format`. GHS does use pesewas, so
+      the correct value is 1 (true).
+
+      decimals="2" was shipped here by mistake and Validate::isBool(2) is
+      false, which made Currency->validateFields() throw during install:
+      LocalizationPack.php:299 -> ObjectModel.php:923 "Property
+      Currency->decimals is not valid", aborting the whole installer step with
+      an HTTP 500. Every upstream pack uses 0 or 1; the CI validator now
+      enforces that.
+    -->
+    <currency name="Ghanaian cedi" iso_code="GHS" iso_code_num="936" sign="&#x20B5;" blank="1" format="1" decimals="1"/>
   </currencies>
   <languages>
     <language iso_code="en"/>

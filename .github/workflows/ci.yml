@@ -216,6 +216,35 @@ jobs:
                       report(path, f'currency missing {missing}')
                   elif len(c.get('iso_code')) != 3 or len(c.get('iso_code_num')) != 3:
                       report(path, 'currency iso codes must be 3 chars')
+                  else:
+                      # Presence is not enough: the importer casts and then
+                      # runs ObjectModel::validateFields(), which THROWS
+                      # (ObjectModel.php:923) rather than skipping, taking the
+                      # whole install down with an HTTP 500. Mirror the field
+                      # definitions in classes/Currency.php:73-76 exactly.
+                      #
+                      # decimals and blank are TYPE_BOOL / Validate::isBool,
+                      # i.e. /^(0|1)$/. decimals means "show fractional digits
+                      # at all", NOT the number of them - a pack author writing
+                      # decimals="2" for a two-decimal currency produces an
+                      # unimportable pack. This exact defect shipped in gh.xml
+                      # and aborted a real install at configureShop.
+                      if not re.fullmatch(r'[01]', c.get('decimals')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'decimals={c.get("decimals")!r}; it is a '
+                                       f'boolean (0 or 1), not a digit count '
+                                       f'(Currency.php:75, Validate::isBool)')
+                      if not re.fullmatch(r'[01]', c.get('blank')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'blank={c.get("blank")!r}; expected 0 or 1')
+                      if not re.fullmatch(r'\d+', c.get('format')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'format={c.get("format")!r}; expected an '
+                                       f'unsigned int (Validate::isUnsignedId)')
+                      if not c.get('sign') or len(c.get('sign').encode('utf-8')) > 8:
+                          report(path, f'currency {c.get("iso_code")!r} has a '
+                                       f'sign that is empty or over 8 bytes '
+                                       f'(Currency.php:73 size=8)')
 
           print(f'Packs validated: {packs}')
           print(f'Known countries: {len(countries)}')
