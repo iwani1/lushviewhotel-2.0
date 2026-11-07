@@ -1,17 +1,29 @@
 <?php
 /**
- * Lush View Hotel - single source of truth for the brand.
+ * Lush View Hotel - brand read API and brand meta tags.
  *
- * Stores the hotel's name, tagline, contact details and social links as
- * Configuration keys, exposes them to every other LVH module and to the theme,
- * and publishes brand meta tags in the front-office <head>.
+ * QloApps already stores almost every brand value a hotel needs, on one page
+ * (back office -> Hotel General Configuration -> "Website Contact Details"):
+ * PS_SHOP_NAME, PS_SHOP_EMAIL, PS_SHOP_PHONE, PS_SHOP_ADDR1/ADDR2/CODE,
+ * PS_SHOP_DETAILS and WK_HTL_ESTABLISHMENT_YEAR. The logo, mobile logo and mail
+ * logo are on the appearance page (PS_LOGO, PS_LOGO_MOBILE, PS_LOGO_MAIL), and
+ * the footer social icons belong to the blocksocial module (BLOCKSOCIAL_*).
  *
- * Deliberately does NOT edit core files, theme templates or JavaScript: the
- * visible guest-facing brand (logo, shop name in the header, emails, PDFs) is
- * already configuration-driven in QloApps (PS_SHOP_NAME, PS_LOGO, PS_FAVICON),
- * and the front-page demo copy is CMS content editable from the back office.
- * See docs/project/06-branding-plan.md for the full surface map and for the two
- * template literals this module intentionally leaves alone.
+ * So this module deliberately stores almost nothing. It does three jobs:
+ *
+ *   1. LvhBranding::brand('PHONE') - one read API for later LVH modules
+ *      (emails, reports, guest messages) that resolves to the core key which
+ *      really owns the value, so no brand datum exists in two places and can
+ *      drift.
+ *   2. The two things the core has no home for: a tagline (the legacy
+ *      WK_HTL_TAG_LINE key is only listed in deleteConfigVars() and is never
+ *      read or rendered in 1.8.0) and a theme colour.
+ *   3. Brand meta tags in the front-office <head> - theme-color and
+ *      og:site_name - which no core template emits.
+ *
+ * Nothing here edits core files, theme templates or JavaScript. The full
+ * surface map, the live-site audit and the decisions behind this design are in
+ * docs/project/06-branding-plan.md.
  *
  * NOTICE OF LICENSE
  *
@@ -19,7 +31,7 @@
  * that is available through the world-wide-web at this URL:
  * http://opensource.org/licenses/afl-3.0.php
  *
- * @author    Lush View Hotel <info@lushviewhotel.net>
+ * @author    Lush View Hotel
  * @copyright 2026 Lush View Hotel
  * @license   http://opensource.org/licenses/afl-3.0.php Academic Free License (AFL 3.0)
  */
@@ -30,38 +42,37 @@ if (!defined('_PS_VERSION_')) {
 
 class LvhBranding extends Module
 {
-    const KEY_NAME        = 'LVH_BRAND_NAME';
+    /** Keys this module owns, because the core has nowhere to put them. */
     const KEY_TAGLINE     = 'LVH_BRAND_TAGLINE';
-    const KEY_EMAIL       = 'LVH_BRAND_EMAIL';
-    const KEY_PHONE       = 'LVH_BRAND_PHONE';
-    const KEY_ADDRESS     = 'LVH_BRAND_ADDRESS';
     const KEY_THEME_COLOR = 'LVH_BRAND_THEME_COLOR';
 
     /**
-     * Core keys to fall back on when an LVH key is empty, so this module never
-     * needs a second copy of data the core already owns. Social links are NOT
-     * here on purpose: the blocksocial module (BLOCKSOCIAL_FACEBOOK, _TWITTER,
-     * _INSTAGRAM, ...) already renders them in the footer.
+     * Brand surface => the core Configuration key that owns it.
+     *
+     * Read-only on purpose: these are edited on the core pages, not here, so
+     * there is exactly one copy of each value in the database.
      *
      * @var array
      */
-    protected static $coreFallback = array(
-        'NAME'  => 'PS_SHOP_NAME',
-        'EMAIL' => 'PS_SHOP_EMAIL',
+    protected static $coreKeys = array(
+        'NAME'    => 'PS_SHOP_NAME',
+        'EMAIL'   => 'PS_SHOP_EMAIL',
+        'PHONE'   => 'PS_SHOP_PHONE',
+        'ADDRESS' => 'PS_SHOP_ADDR1',
     );
 
     public function __construct()
     {
         $this->name = 'lvhbranding';
         $this->tab = 'administration';
-        $this->version = '0.2.0';
+        $this->version = '0.3.0';
         $this->author = 'Lush View Hotel';
         $this->bootstrap = true;
 
         parent::__construct();
 
         $this->displayName = 'LVH Branding';
-        $this->description = 'Single source of truth for the Lush View Hotel brand: name, tagline, contact details and social links, shared by every LVH module.';
+        $this->description = 'Brand read API for LVH modules, plus the tagline, theme colour and brand meta tags. Reads the core settings instead of duplicating them.';
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
     }
 
@@ -71,17 +82,9 @@ class LvhBranding extends Module
             return false;
         }
 
-        // Seed the two keys the core already owns; everything else starts empty
-        // and is filled in from the back office (task B2 in
-        // docs/project/06-branding-plan.md). No contact details are invented
-        // here: this module is meant to be the source of truth, so it must only
-        // ever hold verified values. Existing values survive a reinstall.
+        // Only the two LVH-owned keys. Existing values survive a reinstall.
         $defaults = array(
-            self::KEY_NAME        => (string) Configuration::get('PS_SHOP_NAME'),
             self::KEY_TAGLINE     => '',
-            self::KEY_EMAIL       => (string) Configuration::get('PS_SHOP_EMAIL'),
-            self::KEY_PHONE       => '',
-            self::KEY_ADDRESS     => '',
             self::KEY_THEME_COLOR => '#252525',
         );
         foreach ($defaults as $key => $value) {
@@ -98,12 +101,8 @@ class LvhBranding extends Module
         if (!parent::uninstall()) {
             return false;
         }
-        foreach (array_keys(self::$coreFallback + array(
-            'TAGLINE' => self::KEY_TAGLINE, 'PHONE' => self::KEY_PHONE,
-            'ADDRESS' => self::KEY_ADDRESS, 'THEME_COLOR' => self::KEY_THEME_COLOR,
-        )) as $short) {
-            Configuration::deleteByName('LVH_BRAND_' . $short);
-        }
+        Configuration::deleteByName(self::KEY_TAGLINE);
+        Configuration::deleteByName(self::KEY_THEME_COLOR);
 
         return true;
     }
@@ -111,23 +110,21 @@ class LvhBranding extends Module
     /**
      * Read a brand value from anywhere: LvhBranding::brand('PHONE').
      *
-     * @param string $short   suffix of the Configuration key, e.g. 'NAME'
-     * @param string $default returned when the key is unset or empty
+     * Resolves NAME, EMAIL, PHONE and ADDRESS to the core key that owns them,
+     * and TAGLINE / THEME_COLOR to this module's own keys.
+     *
+     * @param string $short   brand surface, e.g. 'NAME', 'PHONE', 'TAGLINE'
+     * @param string $default returned when the value is unset or empty
      *
      * @return string
      */
     public static function brand($short, $default = '')
     {
-        $value = Configuration::get('LVH_BRAND_' . $short);
+        $short = strtoupper((string) $short);
+        $key = isset(self::$coreKeys[$short]) ? self::$coreKeys[$short] : 'LVH_BRAND_' . $short;
+        $value = Configuration::get($key);
 
-        if ($value === false || $value === '') {
-            $core = isset(self::$coreFallback[$short])
-                ? Configuration::get(self::$coreFallback[$short])
-                : false;
-            $value = ($core === false) ? '' : (string) $core;
-        }
-
-        return ($value === '') ? $default : (string) $value;
+        return ($value === false || $value === '') ? $default : (string) $value;
     }
 
     public function hookDisplayHeader($params)
@@ -151,16 +148,9 @@ class LvhBranding extends Module
         $output = '';
 
         if (Tools::isSubmit('submitLvhBranding')) {
-            $email = (string) Tools::getValue(self::KEY_EMAIL);
-            if ($email !== '' && !Validate::isEmail($email)) {
-                $output .= $this->displayError('The contact email address is not valid.');
-            } else {
-                foreach (array(self::KEY_NAME, self::KEY_TAGLINE, self::KEY_EMAIL, self::KEY_PHONE,
-                             self::KEY_ADDRESS, self::KEY_THEME_COLOR) as $key) {
-                    Configuration::updateValue($key, (string) Tools::getValue($key));
-                }
-                $output .= $this->displayConfirmation('Brand settings saved.');
-            }
+            Configuration::updateValue(self::KEY_TAGLINE, (string) Tools::getValue(self::KEY_TAGLINE));
+            Configuration::updateValue(self::KEY_THEME_COLOR, (string) Tools::getValue(self::KEY_THEME_COLOR));
+            $output .= $this->displayConfirmation('Brand settings saved.');
         }
 
         return $output . $this->renderForm();
@@ -168,46 +158,51 @@ class LvhBranding extends Module
 
     protected function renderForm()
     {
-        $fields = array(
-            self::KEY_NAME        => 'Brand name (guest-facing)',
-            self::KEY_TAGLINE     => 'Tagline',
-            self::KEY_EMAIL       => 'Contact email',
-            self::KEY_PHONE       => 'Contact phone',
-            self::KEY_ADDRESS     => 'Postal / street address',
-            self::KEY_THEME_COLOR => 'Theme colour (hex, optional)',
-        );
+        $action = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
 
         $html  = '<div class="panel">';
         $html .= '<h3><i class="icon-star"></i> ' . $this->displayName . '</h3>';
-        $html .= '<p>Empty fields fall back to the core settings, so nothing is stored twice. '
-               . 'Where each brand surface actually lives:</p>'
-               . '<ul>'
-               . '<li><strong>Header logo, favicon, shop name</strong> (also the email From name, '
-               . 'email subject prefix, PDF header and the footer copyright): '
-               . 'Preferences &gt; General and Preferences &gt; Appearance.</li>'
-               . '<li><strong>Social icons in the footer</strong>: Modules &gt; Social network links '
-               . '(blocksocial), not this page.</li>'
-               . '<li><strong>Hotel phone and address</strong>: the hotel branch record under '
-               . 'Hotel Reservation System. The two fields here are only a convenience copy for '
-               . 'LVH emails and reports - fill them from the branch record, never separately.</li>'
-               . '<li><strong>Front-page copy, interior gallery names, amenities and features '
-               . 'blocks</strong>: Modules &gt; About Hotel Block / Hotel Features Block, and '
-               . 'Preferences &gt; CMS.</li>'
-               . '</ul>'
-               . '<p>Full surface map and the live-site audit: docs/project/06-branding-plan.md.</p>';
-        $action = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+        $html .= '<p>Only two values live here. Everything else is read from the core settings, '
+               . 'so no brand value can exist in two places and drift apart.</p>';
+
+        // Read-only: where the rest of the brand actually lives.
+        $html .= '<h4>Owned by QloApps - edit these on the core pages</h4>';
+        $html .= '<table class="table"><thead><tr><th>Surface</th><th>Current value</th><th>Where to change it</th></tr></thead><tbody>';
+        $coreRows = array(
+            'NAME'    => 'Hotel General Configuration &rarr; Website Contact Details &rarr; Website name',
+            'EMAIL'   => 'Hotel General Configuration &rarr; Website Contact Details &rarr; Website email',
+            'PHONE'   => 'Hotel General Configuration &rarr; Website Contact Details &rarr; Phone',
+            'ADDRESS' => 'Hotel General Configuration &rarr; Website Contact Details &rarr; Address line 1',
+        );
+        foreach ($coreRows as $short => $where) {
+            $value = self::brand($short);
+            $html .= '<tr><td>' . $short . '</td><td>'
+                   . ($value === '' ? '<em>(empty)</em>' : htmlspecialchars($value, ENT_QUOTES, 'UTF-8'))
+                   . '</td><td>' . $where . '</td></tr>';
+        }
+        $html .= '<tr><td>LOGO</td><td>&mdash;</td><td>Appearance page: PS_LOGO, PS_LOGO_MOBILE, PS_LOGO_MAIL</td></tr>';
+        $html .= '<tr><td>SOCIAL</td><td>&mdash;</td><td>Modules &rarr; Social network links (blocksocial): Facebook, X, Instagram&hellip;</td></tr>';
+        $html .= '</tbody></table>';
+
+        // Editable: the two LVH-owned keys.
+        $html .= '<h4>Owned by Lush View</h4>';
         $html .= '<form method="post" action="' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8') . '">';
         $html .= '<table class="table table-striped">';
+        $fields = array(
+            self::KEY_TAGLINE     => 'Tagline (the core has no tagline field in 1.8.0)',
+            self::KEY_THEME_COLOR => 'Theme colour (hex, used for the theme-color meta tag)',
+        );
         foreach ($fields as $key => $label) {
-            $html .= '<tr><th style="width:30%">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</th>'
+            $html .= '<tr><th style="width:40%">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</th>'
                    . '<td><input type="text" name="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '" '
                    . 'value="' . htmlspecialchars((string) Configuration::get($key), ENT_QUOTES, 'UTF-8') . '" '
                    . 'class="form-control fixed-width-xxl" /></td></tr>';
         }
         $html .= '</table>';
-        $html .= '<button type="submit" name="submitLvhBranding" class="btn btn-primary">'
-               . 'Save brand settings</button>';
-        $html .= '</form></div>';
+        $html .= '<button type="submit" name="submitLvhBranding" class="btn btn-primary">Save brand settings</button>';
+        $html .= '</form>';
+        $html .= '<p>Full surface map and live-site audit: docs/project/06-branding-plan.md</p>';
+        $html .= '</div>';
 
         return $html;
     }
