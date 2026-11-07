@@ -1,0 +1,36 @@
+-- Migration 001 - widen the password columns so bcrypt hashes fit.
+--
+-- WHY
+--   The live 1.7.0 database stores qlo_employee.passwd and qlo_customer.passwd
+--   as varchar(32): the legacy MD5(_COOKIE_KEY_ . password) digest. QloApps
+--   1.8.0 hashes with bcrypt via classes/PasswordHashing.php, and a bcrypt
+--   hash is exactly 60 characters.
+--
+--   The rehash-on-login path (classes/Employee.php:303-305 and
+--   classes/Customer.php:413-415) is UNGUARDED, and classes/db/DbPDO.php:69
+--   never sets PDO::ATTR_ERRMODE, so PDO runs in ERRMODE_SILENT. Writing a
+--   60-char hash into a 32-char column therefore either:
+--     - STRICT sql_mode : error 1406 is swallowed and the password stays MD5
+--                         forever, silently; or
+--     - non-strict      : the hash is TRUNCATED to 32 chars, isPrimaryHash()
+--                         then reports it as already migrated, password_verify()
+--                         can never match, and the original MD5 is destroyed -
+--                         a permanent lockout triggered by the first
+--                         SUCCESSFUL login.
+--
+--   Nothing in this tree widens the columns: install-dev/upgrade/sql/ stops at
+--   1.6.1.0.sql and touches no passwd column. So the widening must be applied
+--   by hand, before 1.8.0 code authenticates against imported 1.7.0 data.
+--
+-- SAFETY
+--   Widening a varchar is lossless - every existing 32-char value still fits.
+--   Reversal is dev/migrations/001_widen_password_columns.down.sql; read its
+--   guard before running it.
+--
+-- APPLIES TO
+--   The local development copy of the live database (qloapps_live), applied
+--   automatically by dev/scripts/import-live-dump.sh; and the live production
+--   database, which must receive this migration BEFORE any 1.8.0 upgrade.
+
+ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(60) NOT NULL;
+ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(60) NOT NULL;

@@ -59,6 +59,22 @@ echo "    CREATE TABLE      : $tables"
 echo "    table prefix      : qlo_"
 echo "    size              : $size bytes"
 echo "    sha256            : $(sha256sum "$dump" | cut -d' ' -f1)"
+
+# Fail BEFORE writing anything if the password-widening migration is absent.
+# It is committed code, not data - but it is a .sql file in a tree whose
+# .gitignore excludes *.sql, and it was once missing from a fresh clone for
+# exactly that reason. Without it the import "succeeds" while the password
+# columns stay varchar(32), and the first bcrypt rehash then truncates and
+# permanently locks accounts out. Refusing here is cheaper than that.
+MIGRATION="dev/migrations/001_widen_password_columns.up.sql"
+if [ ! -f "$MIGRATION" ]; then
+    echo "error: $MIGRATION is missing - refusing to import." >&2
+    echo "       It is committed code; run 'git pull' (and see the !dev/migrations" >&2
+    echo "       negation in .gitignore). Importing without it would leave passwd at" >&2
+    echo "       varchar(32), where a bcrypt rehash truncates and locks accounts out." >&2
+    exit 1
+fi
+echo "    migration 001     : present ($MIGRATION)"
 echo
 
 echo "=== 2. Confirming the database server is running ==="
@@ -110,7 +126,7 @@ echo "=== 5. Applying migration 001 (widen password columns) ==="
 # reasoning. Without this, re-hashing on login silently fails (STRICT mode) or
 # truncates and locks the account out (non-strict mode).
 $ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" "$TARGET_DB" \
-    < dev/migrations/001_widen_password_columns.up.sql
+    < "$MIGRATION"
 $ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" -N -B "$TARGET_DB" -e "
     SELECT CONCAT('    ', TABLE_NAME, '.passwd is now varchar(', CHARACTER_MAXIMUM_LENGTH, ')')
     FROM information_schema.COLUMNS

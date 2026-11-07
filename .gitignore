@@ -264,6 +264,11 @@ robots.txt
 !install-dev/data/theme.sql
 # Schema-only reference extracted from the live database (contains no row data).
 !docs/project/*.sql
+# Hand-written schema migrations. These are CODE, not data: they must be
+# committed or a fresh clone silently lacks them. (They were gitignored once,
+# which made import-live-dump.sh die at step 5 on a machine that had
+# everything else, leaving password columns at varchar(32).)
+!dev/migrations/*.sql
 *.sql.gz
 *.sql.bz2
 *.sql.zip
