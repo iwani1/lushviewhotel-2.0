@@ -205,7 +205,14 @@ echo "You can now log in at:  http://localhost:8080/admin-dev/\n";
 echo "  email   : $email\n";
 echo "  password: the one you supplied\n";
 if (!$asCustomer) {
-    echo "\nIf the back office still refuses the login, clear the caches:\n";
-    echo "  rm -f cache/class_index.php\n";
-    echo "  rm -rf cache/smarty/compile/* cache/smarty/cache/*\n";
+    echo "\nIf the back office still refuses the login, clear the caches FROM INSIDE\n";
+    echo "the container - under rootless Podman the host user cannot delete the\n";
+    echo "subtrees Apache created (they belong to a subuid), so a host-side rm\n";
+    echo "fails half-way through:\n";
+    echo "  podman-compose exec app sh -c 'rm -f /var/www/html/cache/class_index.php; \\\n";
+    echo "    find /var/www/html/cache/smarty/compile /var/www/html/cache/smarty/cache \\\n";
+    echo "      -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'\n";
+    echo "Equivalent from the host, via the container user namespace:\n";
+    echo "  podman unshare sh -c 'rm -f cache/class_index.php; find cache/smarty/compile \\\n";
+    echo "    cache/smarty/cache -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'\n";
 }

@@ -375,13 +375,15 @@ your machine changes what the container serves. Two exceptions:
 
 - **PHP changes** are picked up on the next request (opcache is set to revalidate every
   request in `dev/docker/php.ini`).
-- **Template (`.tpl`) changes** need the Smarty cache cleared:
+- **Template (`.tpl`) changes** need the Smarty cache cleared. Do it inside the container and
+  preserve the `index.php` guards; under rootless Podman a host-side `rm` cannot delete the
+  subtrees Apache created — see §10.3.2:
   ```bash
-  docker compose exec app bash -c 'rm -rf cache/smarty/compile/* cache/smarty/cache/*'
+  podman-compose exec app sh -c 'find /var/www/html/cache/smarty/compile /var/www/html/cache/smarty/cache -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'
   ```
 - **Adding a class or an override** needs the class index rebuilt:
   ```bash
-  docker compose exec app rm -f cache/class_index.php
+  podman-compose exec app rm -f /var/www/html/cache/class_index.php
   ```
 
 To connect a database GUI (DBeaver, DataGrip) from your host: host `127.0.0.1`, port `3307`,
@@ -691,6 +693,36 @@ default; path 2 works fine without it.
 
 Finally, SELinux `:z` relabelling behaves the same under both runtimes, and both bind mounts in
 `docker-compose.yml` carry it.
+
+#### 10.3.2 Clearing caches when the host says "Permission denied"
+
+Under rootless Podman's default user namespace, everything Apache writes (compiled Smarty
+templates, uploaded images, logs) is owned by a container uid that appears on your host as a
+subuid in your range. The entrypoint grants group-write to the directories it knows about at
+boot, but subtrees Apache creates *later* arrive as `drwxr-xr-x` owned by that subuid, so from
+the host you can read them and cannot delete inside them:
+
+```
+rm: cannot remove 'cache/smarty/compile/6e/c3/f2/...tpl.php': Permission denied
+```
+
+That is expected and harmless — the cache is regenerable — but clear it from somewhere that
+*is* root inside the user namespace:
+
+```bash
+# inside the app container (preferred; qlo-app is the fixed container name)
+podman-compose exec app sh -c 'rm -f /var/www/html/cache/class_index.php; find /var/www/html/cache/smarty/compile /var/www/html/cache/smarty/cache -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'
+
+# or from the host, borrowing the container's user namespace
+podman unshare sh -c 'rm -f cache/class_index.php; find cache/smarty/compile cache/smarty/cache -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'
+```
+
+`dev/scripts/use-db.sh` performs the container-side clear itself when it switches databases.
+
+From the container's first start the entrypoint also runs Apache with `umask 002` in this
+configuration, so *newly* created files and directories are group-writable (775/664) and your
+host user — who belongs to that group — can manage them directly. Subtrees created before that
+change need one of the two commands above a single time.
 
 ### 10.4 Port 8080 or 3307 already in use
 

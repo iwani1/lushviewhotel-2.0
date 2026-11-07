@@ -135,7 +135,17 @@ Recorded so there is no ambiguity about what has *not* been done:
 - **No core file has been rebranded, renamed or rewritten.** The only core-tree edits are the
   three small, surgical fixes C2, C3 and the localization pack C1.
 - **No module has been built.** `lvhbranding` and the other seven exist only as designs.
-- **No migration script has been written or run.** The schema work is specified, not executed.
+- **Migration 001 exists and has run LOCALLY only.** `dev/migrations/001_widen_password_columns.up.sql`
+  (committed in 6ecc64a; before that it was silently excluded by the root `*.sql` gitignore rule
+  and never shipped) is applied automatically to `qloapps_live` by
+  `dev/scripts/import-live-dump.sh`, and has been run against the local copy of the live data.
+  It has NOT been run on production, and must be before any 1.8.0 upgrade there.
+- **A cleartext employee password exists in the LIVE database.** `qlo_employee` id 10 holds a
+  13-character `passwd` value that is neither a 32-char MD5 digest nor a 60-char bcrypt hash,
+  i.e. it is stored in cleartext. `PasswordHashing::validateHash()` matches neither scheme, so
+  that account can never authenticate, while the credential itself is readable by anyone with
+  database access. Disable or rotate it on the live site; added to the security close-out list
+  alongside the 15 password rotations. Found 2026-11-07 while verifying the local import.
 - **No deployment has occurred.** The live site is untouched by this project.
 - **Nothing destructive has been run against any database.** The live export was analysed
   read-only from a copy outside the repository.

@@ -201,6 +201,15 @@ if [ "$ROOTLESS" -eq 1 ] && [ "$NEEDS_GROUP_WRITE" -eq 1 ]; then
 fi
 
 if [ "$NEEDS_GROUP_WRITE" -eq 1 ]; then
+    # Everything Apache creates from here on (Smarty compile cache, uploaded
+    # images, logs) inherits this umask. 002 yields 775/664, i.e. group-writable,
+    # and the group is the one the host user belongs to - so generated files can
+    # be managed from the host. Without it, subtrees Apache creates arrive as
+    # drwxr-xr-x owned by a container uid that maps to a host subuid, and the
+    # user hits "Permission denied" trying to clear caches from their own
+    # machine. (Directories created BEFORE this umask existed still need
+    # `podman unshare` or a container-side rm once; see doc 05 section 10.3.)
+    umask 002
     # `X` grants execute to directories only, which is what traversal needs, and
     # leaves regular files non-executable.
     log "Granting group-write to the paths the installer checks ..."

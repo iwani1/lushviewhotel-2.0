@@ -83,10 +83,23 @@ if [ "$after" != "$db" ]; then
     exit 1
 fi
 
-# Clear caches. The index.php guards inside these directories are preserved.
-rm -f cache/class_index.php
-find cache/smarty/compile -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
-find cache/smarty/cache    -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
+# Clear caches, preserving the index.php guards inside those directories.
+#
+# Prefer doing it INSIDE the app container. Under rootless Podman the files
+# Apache generated belong to a container uid that maps to a host subuid, and the
+# subtrees it created are drwxr-xr-x owned by that subuid - so a host-side rm
+# dies with "Permission denied" half-way through and leaves a mixed cache.
+# Inside the container the same rm runs as root against the bind mount and
+# always succeeds. qlo-app is the fixed container_name in docker-compose.yml.
+CLEAR='rm -f /var/www/html/cache/class_index.php; find /var/www/html/cache/smarty/compile /var/www/html/cache/smarty/cache -mindepth 1 -maxdepth 1 ! -name index.php -exec rm -rf {} +'
+if [ -n "$ENG" ]; then
+    "$ENG" exec -i qlo-app sh -c "$CLEAR" 2>/dev/null || ENG=""
+fi
+if [ -z "$ENG" ]; then
+    rm -f cache/class_index.php 2>/dev/null || true
+    find cache/smarty/compile -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
+    find cache/smarty/cache    -mindepth 1 -maxdepth 1 ! -name 'index.php' -exec rm -rf {} + 2>/dev/null || true
+fi
 
 echo "Switched database: $before  ->  $after"
 echo "Cleared: cache/class_index.php and compiled Smarty templates."
