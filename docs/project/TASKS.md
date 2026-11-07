@@ -146,6 +146,13 @@ Recorded so there is no ambiguity about what has *not* been done:
   that account can never authenticate, while the credential itself is readable by anyone with
   database access. Disable or rotate it on the live site; added to the security close-out list
   alongside the 15 password rotations. Found 2026-11-07 while verifying the local import.
+- **A security close-out runbook now exists.** `docs/deploy/security-closeout-runbook.md`
+  orders every owner-executable finding: make the repository private (the purged export is
+  still publicly fetchable by object SHA while it is public), the id-10 cleartext account,
+  the 15 password rotations paired with migration 001 on production, disabling
+  `qlohotelreview` on 1.7.0, stopping the version fingerprint, the shop-identity and
+  placeholder-URL corrections, and Act 843 data-request readiness. Each item carries its
+  own verification step. It deliberately records no object SHA, email address or password.
 - **No deployment has occurred.** The live site is untouched by this project.
 - **Nothing destructive has been run against any database.** The live export was analysed
   read-only from a copy outside the repository.
