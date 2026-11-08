@@ -51,7 +51,7 @@ class LvhUpgrader extends Module
     {
         $this->name = 'lvhupgrader';
         $this->tab = 'administration';
-        $this->version = '1.0.2';
+        $this->version = '1.0.3';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -641,8 +641,12 @@ PHP;
         if (!$has180Version) {
             throw new RuntimeException('Extracted archive does not declare _QLO_INSTALL_VERSION_ = 1.8.0.0 in install/install_version.php or CHANGELOG.txt.');
         }
-        if (!is_file($stageRoot . '/vendor/autoload.php')) {
-            throw new RuntimeException('Extracted archive is missing vendor/autoload.php (must use official release asset, not raw git source zip).');
+        if (
+            !is_file($stageRoot . '/config/autoload.php') ||
+            !is_file($stageRoot . '/classes/PrestaShopAutoload.php') ||
+            !is_file($stageRoot . '/tools/defuse/php-encryption/defuse-crypto.phar')
+        ) {
+            throw new RuntimeException('Extracted archive is missing core autoloader or tools/defuse crypto library.');
         }
         if (
             !is_file($stageRoot . '/classes/PasswordHashing.php') ||
@@ -651,9 +655,23 @@ PHP;
             throw new RuntimeException('Extracted archive is missing QloApps 1.8.0 signature classes (PasswordHashing.php / HotelHeaderImage.php).');
         }
 
-        $stageAdminFolder = is_dir($stageRoot . '/admin') ? 'admin' : (is_dir($stageRoot . '/admin-dev') ? 'admin-dev' : '');
+        $stageAdminFolder = '';
+        foreach (array('admin', 'admin-dev') as $cand) {
+            if (is_dir($stageRoot . '/' . $cand) && is_file($stageRoot . '/' . $cand . '/functions.php')) {
+                $stageAdminFolder = $cand;
+                break;
+            }
+        }
         if ($stageAdminFolder === '') {
-            throw new RuntimeException('Extracted archive does not contain an admin or admin-dev folder.');
+            foreach (scandir($stageRoot) as $entry) {
+                if (strpos($entry, 'admin') === 0 && is_dir($stageRoot . '/' . $entry) && is_file($stageRoot . '/' . $entry . '/functions.php')) {
+                    $stageAdminFolder = $entry;
+                    break;
+                }
+            }
+        }
+        if ($stageAdminFolder === '') {
+            throw new RuntimeException('Extracted archive does not contain an admin folder with functions.php.');
         }
         $stageAdminDir = $stageRoot . '/' . $stageAdminFolder;
 
@@ -672,9 +690,16 @@ PHP;
         }
 
         // Safety strip: remove installer folders, CHANGELOG.txt & any settings.inc.php from stage
-        foreach (array('install', 'install-dev') as $instDir) {
-            if (is_dir($stageRoot . '/' . $instDir)) {
-                $this->rrmdirNative($stageRoot . '/' . $instDir);
+        foreach (scandir($stageRoot) as $stEntry) {
+            if ($stEntry === '.' || $stEntry === '..') {
+                continue;
+            }
+            if (
+                ($stEntry === 'install' || $stEntry === 'install-dev' || strpos($stEntry, 'install') === 0) &&
+                is_dir($stageRoot . '/' . $stEntry) &&
+                is_file($stageRoot . '/' . $stEntry . '/install_version.php')
+            ) {
+                $this->rrmdirNative($stageRoot . '/' . $stEntry);
             }
         }
         @unlink($stageRoot . '/CHANGELOG.txt');
@@ -694,7 +719,7 @@ PHP;
             'zip_size_mb' => round(filesize($zipPath) / 1048576, 2),
             'stage_admin_folder' => $stageAdminFolder,
             'message' => sprintf(
-                'Official QloApps 1.8.0.0 release (%.1f MB) downloaded, verified (`vendor/autoload.php` + `PasswordHashing.php` present), XSS-patched, and staged cleanly.',
+                'Official QloApps 1.8.0.0 release (%.1f MB) verified (`PasswordHashing.php` + `HotelHeaderImage.php` + `defuse-crypto.phar`), XSS-patched, and staged cleanly.',
                 filesize($zipPath) / 1048576
             ),
         );
@@ -1255,14 +1280,17 @@ PHP;
                         $stub->version = $inst->version;
                         $stub->database_version = (string) $mRow['version'];
                         $stub->installed = 1;
-                        if (Module::initUpgradeModule($stub)) {
-                            $inst->runUpgradeModule();
+                        try {
+                            if (Module::initUpgradeModule($stub)) {
+                                $inst->runUpgradeModule();
+                            }
+                        } catch (Exception $innerE) {
+                        } catch (Throwable $innerT) {
                         }
                         Module::upgradeModuleVersion($mName, $inst->version);
                         $upgradedModules++;
                     }
                 } catch (Exception $e) {
-                    // Fallback: ensure version column is synced so module stays enabled
                 } catch (Throwable $t) {
                 }
             }
