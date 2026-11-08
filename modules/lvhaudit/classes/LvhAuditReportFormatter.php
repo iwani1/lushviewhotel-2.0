@@ -50,6 +50,7 @@ class LvhAuditReportFormatter
 
         return array(
             'qloapps_version' => $qloVer,
+            'qlo_db_version' => isset($r['environment']['qloapps']['db_version']) ? $r['environment']['qloapps']['db_version'] : 'unknown',
             'php_version' => $phpVer,
             'db_version' => $dbVer,
             'tables_count' => $tables,
@@ -86,6 +87,22 @@ class LvhAuditReportFormatter
         $md[] = '- **Collection Time:** ' . $k['duration_ms'] . ' ms (read-only; zero DB/file writes)';
         $md[] = '- **Privacy Mode:** Strict — zero credentials, keys, guest PII, or employee PII exported';
         $md[] = '';
+
+        if (!empty($r['post_upgrade_180_health']['checks'])) {
+            $hs = $r['post_upgrade_180_health']['summary'];
+            $md[] = '## 0. Post-1.8.0 Live Health Scorecard ('
+                . (int) $hs['passed'] . '/' . (int) $hs['total_checks'] . ' PASS, '
+                . (int) $hs['warnings'] . ' WARN, ' . (int) $hs['failed'] . ' FAIL)';
+            $md[] = '';
+            $md[] = '| Status | Check | Detail |';
+            $md[] = '|:---:|---|---|';
+            foreach ($r['post_upgrade_180_health']['checks'] as $chk) {
+                $md[] = '| **' . $chk['status'] . '** | '
+                    . str_replace('|', '/', $chk['label']) . ' | '
+                    . str_replace('|', '/', $chk['detail']) . ' |';
+            }
+            $md[] = '';
+        }
 
         $md[] = '## 1. Runtime & 1.8.0 Readiness';
         $md[] = '- **QloApps Code / DB Version:** `' . $k['qloapps_version'] . '` / `'

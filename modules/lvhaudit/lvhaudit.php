@@ -40,7 +40,7 @@ class LvhAudit extends Module
     {
         $this->name = 'lvhaudit';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -111,6 +111,7 @@ class LvhAudit extends Module
 
         $this->context->smarty->assign(array(
             'lvh_kpis' => $kpis,
+            'lvh_health' => isset($previewReport['post_upgrade_180_health']) ? $previewReport['post_upgrade_180_health'] : array(),
             'lvh_form_action' => $formAction,
             'lvh_audit_error' => $auditError,
         ));

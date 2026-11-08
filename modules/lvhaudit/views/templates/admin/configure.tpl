@@ -27,7 +27,7 @@
             <div class="well well-sm" style="margin-bottom: 10px;">
                 <div class="text-muted">{l s='Runtime Stack' mod='lvhaudit'}</div>
                 <h4 style="margin: 6px 0 2px;">QloApps {$lvh_kpis.qloapps_version|escape:'html':'UTF-8'}</h4>
-                <small>PHP {$lvh_kpis.php_version|escape:'html':'UTF-8'} &middot; DB {$lvh_kpis.db_version|escape:'html':'UTF-8'}</small>
+                <small>DB Schema {$lvh_kpis.qlo_db_version|escape:'html':'UTF-8'} &middot; PHP {$lvh_kpis.php_version|escape:'html':'UTF-8'}</small>
             </div>
         </div>
         <div class="col-md-3 col-sm-6">
@@ -63,6 +63,47 @@
         <strong>{l s='DB-only orphan modules:' mod='lvhaudit'}</strong>
         <code>{$lvh_kpis.modules_orphans|intval}</code>
     </p>
+
+    {if isset($lvh_health.checks) && $lvh_health.checks}
+        <hr />
+        <h4 style="margin-top: 10px; margin-bottom: 10px;">
+            <i class="icon-shield"></i>
+            {l s='Live QloApps 1.8.0 Health & Schema Parity Scorecard' mod='lvhaudit'}
+            <small>
+                ({$lvh_health.summary.passed|intval}/{$lvh_health.summary.total_checks|intval} PASS
+                &middot; {$lvh_health.summary.warnings|intval} WARN
+                &middot; {$lvh_health.summary.failed|intval} FAIL)
+            </small>
+        </h4>
+        <div class="table-responsive">
+            <table class="table table-bordered table-condensed" style="margin-bottom: 12px;">
+                <thead>
+                    <tr>
+                        <th style="width: 90px; text-align: center;">{l s='Status' mod='lvhaudit'}</th>
+                        <th style="width: 38%;">{l s='Verification Gate' mod='lvhaudit'}</th>
+                        <th>{l s='Live Finding' mod='lvhaudit'}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {foreach from=$lvh_health.checks item=chk}
+                        <tr>
+                            <td style="text-align: center;">
+                                {if $chk.status == 'PASS'}
+                                    <span class="label label-success">PASS</span>
+                                {elseif $chk.status == 'WARN'}
+                                    <span class="label label-warning">WARN</span>
+                                {else}
+                                    <span class="label label-danger">FAIL</span>
+                                {/if}
+                            </td>
+                            <td><strong>{$chk.label|escape:'html':'UTF-8'}</strong></td>
+                            <td><code>{$chk.detail|escape:'html':'UTF-8'}</code></td>
+                        </tr>
+                    {/foreach}
+                </tbody>
+            </table>
+        </div>
+    {/if}
 
     <hr />
 

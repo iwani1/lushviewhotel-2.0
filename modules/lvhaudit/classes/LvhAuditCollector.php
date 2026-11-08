@@ -68,9 +68,9 @@ class LvhAuditCollector
 
         $report = array(
             'meta' => array(
-                'schema_version' => '1.0.0',
+                'schema_version' => '1.1.0',
                 'module' => 'lvhaudit',
-                'module_version' => '1.0.0',
+                'module_version' => '1.1.0',
                 'generated_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
                 'generated_at_local' => date('Y-m-d H:i:s P'),
                 'privacy_mode' => 'strict_redacted_no_pii_no_secrets',
@@ -80,6 +80,7 @@ class LvhAuditCollector
             'database' => $this->runSafe('database', 'collectDatabase'),
             'modules' => $this->runSafe('modules', 'collectModules'),
             'code_integrity' => $this->runSafe('code_integrity', 'collectCodeIntegrity'),
+            'post_upgrade_180_health' => $this->runSafe('post_upgrade_180_health', 'collectPostUpgrade180Health'),
             'staff_and_access' => $this->runSafe('staff_and_access', 'collectStaffAndAccess'),
             'hotel_catalog' => $this->runSafe('hotel_catalog', 'collectHotelCatalog'),
             'operations_analytics' => $this->runSafe('operations_analytics', 'collectOperationsAnalytics'),
@@ -234,6 +235,41 @@ class LvhAuditCollector
         return '`' . bqSQL($this->prefix . $shortTable) . '`';
     }
 
+    /**
+     * Resolve active QloApps code version (`_QLOAPPS_VERSION_` in settings.inc.php,
+     * falling back to `_PS_VERSION_`).
+     *
+     * @return string
+     */
+    protected function getQloCodeVersion()
+    {
+        if (defined('_QLOAPPS_VERSION_')) {
+            return (string) _QLOAPPS_VERSION_;
+        }
+        if (defined('_QLO_VERSION_')) {
+            return (string) _QLO_VERSION_;
+        }
+        return defined('_PS_VERSION_') ? (string) _PS_VERSION_ : 'unknown';
+    }
+
+    /**
+     * Resolve active QloApps DB schema version (`QLO_VERSION_DB` bypassing query cache).
+     *
+     * @return string
+     */
+    protected function getQloDbVersion()
+    {
+        if ($this->hasTable('configuration')) {
+            $v = (string) $this->queryValue(
+                "SELECT `value` FROM " . $this->tbl('configuration') . " WHERE `name` = 'QLO_VERSION_DB'"
+            );
+            if ($v !== '') {
+                return $v;
+            }
+        }
+        return (string) Configuration::get('PS_VERSION_DB');
+    }
+
     /* ======================================================================
      * 1. ENVIRONMENT & 1.8.0 READINESS
      * ====================================================================== */
@@ -299,8 +335,10 @@ class LvhAuditCollector
 
         return array(
             'qloapps' => array(
-                'code_version' => defined('_PS_VERSION_') ? _PS_VERSION_ : 'unknown',
-                'db_version' => (string) Configuration::get('PS_VERSION_DB'),
+                'code_version' => $this->getQloCodeVersion(),
+                'db_version' => $this->getQloDbVersion(),
+                'ps_base_code_version' => defined('_PS_VERSION_') ? _PS_VERSION_ : 'unknown',
+                'ps_base_db_version' => (string) Configuration::get('PS_VERSION_DB'),
                 'install_version' => defined('_PS_INSTALL_VERSION_') ? _PS_INSTALL_VERSION_ : '',
                 'dev_mode' => defined('_PS_MODE_DEV_') ? (bool) _PS_MODE_DEV_ : false,
                 'debug_profiling' => defined('_PS_DEBUG_PROFILING_') ? (bool) _PS_DEBUG_PROFILING_ : false,
@@ -676,8 +714,8 @@ class LvhAuditCollector
      */
     protected function collectCodeIntegrity()
     {
-        $psVer = defined('_PS_VERSION_') ? _PS_VERSION_ : '1.7.0.0';
-        $baseInfo = LvhAuditBaseline::getFileBaselineForVersion($psVer);
+        $qloVer = $this->getQloCodeVersion();
+        $baseInfo = LvhAuditBaseline::getFileBaselineForVersion($qloVer);
         $baselineVersion = $baseInfo['baseline_version'];
         $expected = $baseInfo['files'];
         $upstreamMods = array_flip(LvhAuditBaseline::getUpstreamModules($baselineVersion));
@@ -1540,25 +1578,34 @@ class LvhAuditCollector
 
         // Log files inventory on disk (sizes + scrubbed tail of PHP error_log if small/readable)
         $logFiles = array();
-        foreach (array(_PS_ROOT_DIR_ . '/log', _PS_ROOT_DIR_) as $lDir) {
+        $logDirs = array(_PS_ROOT_DIR_ . '/log', _PS_ROOT_DIR_);
+        if (defined('_PS_ADMIN_DIR_') && is_dir(_PS_ADMIN_DIR_)) {
+            $logDirs[] = rtrim(_PS_ADMIN_DIR_, '/\\');
+        }
+        foreach ($logDirs as $lDir) {
             if (!is_dir($lDir)) {
                 continue;
             }
+            $isAdminDir = (defined('_PS_ADMIN_DIR_') && rtrim($lDir, '/\\') === rtrim(_PS_ADMIN_DIR_, '/\\'));
             foreach (scandir($lDir) as $fn) {
                 if ($fn === '.' || $fn === '..' || $fn === 'index.php' || $fn === '.htaccess') {
                     continue;
                 }
-                if ($lDir === _PS_ROOT_DIR_ && $fn !== 'error_log' && substr($fn, -4) !== '.log') {
+                if (($lDir === _PS_ROOT_DIR_ || $isAdminDir) && $fn !== 'error_log' && substr($fn, -4) !== '.log') {
                     continue;
                 }
                 $fp = $lDir . '/' . $fn;
                 if (is_file($fp)) {
-                    $rel = ltrim(str_replace(str_replace('\\', '/', _PS_ROOT_DIR_), '', str_replace('\\', '/', $fp)), '/');
+                    if ($isAdminDir) {
+                        $rel = '<admin>/' . $fn;
+                    } else {
+                        $rel = ltrim(str_replace(str_replace('\\', '/', _PS_ROOT_DIR_), '', str_replace('\\', '/', $fp)), '/');
+                    }
                     $logFiles[] = array(
                         'path' => $rel,
                         'bytes' => (int) @filesize($fp),
                         'mtime_utc' => gmdate('Y-m-d H:i:s', (int) @filemtime($fp)),
-                        'tail_scrubbed' => $this->readScrubbedLogTail($fp, 20),
+                        'tail_scrubbed' => $this->readScrubbedLogTail($fp, 25),
                     );
                 }
             }
@@ -1616,6 +1663,346 @@ class LvhAuditCollector
             $out[] = $clean;
         }
         return $out;
+    }
+
+    /* ======================================================================
+     * 11. POST-1.8.0 LIVE HEALTH, SCHEMA PARITY & HARDENING SCORECARD
+     * ====================================================================== */
+
+    /**
+     * Evaluate 14 live health, schema parity, security, and relational integrity
+     * gates specifically tailored for Lush View Hotel on QloApps 1.8.0.0.
+     *
+     * @return array
+     */
+    protected function collectPostUpgrade180Health()
+    {
+        $checks = array();
+        $root = rtrim(_PS_ROOT_DIR_, '/\\');
+        $adminDir = defined('_PS_ADMIN_DIR_') ? rtrim(_PS_ADMIN_DIR_, '/\\') : ($root . '/admin-dev');
+
+        // 1. Runtime _QLOAPPS_VERSION_
+        $codeVer = $this->getQloCodeVersion();
+        $checks[] = array(
+            'id' => 'runtime_code_version',
+            'label' => 'QloApps Runtime Code Version (_QLOAPPS_VERSION_)',
+            'status' => ($codeVer === '1.8.0.0') ? 'PASS' : 'FAIL',
+            'detail' => 'Active constant: ' . $codeVer,
+        );
+
+        // 2. Database QLO_VERSION_DB
+        $dbVer = $this->getQloDbVersion();
+        $checks[] = array(
+            'id' => 'db_schema_version',
+            'label' => 'QloApps Database Schema Version (QLO_VERSION_DB)',
+            'status' => ($dbVer === '1.8.0.0') ? 'PASS' : 'FAIL',
+            'detail' => 'Active DB value: ' . $dbVer,
+        );
+
+        // 3. PHP 8.2 - 8.5 & required extensions
+        $phpOk = (version_compare(PHP_VERSION, '8.2.0', '>=') && version_compare(PHP_VERSION, '8.6.0', '<'));
+        $reqExts = array('gd', 'pdo_mysql', 'curl', 'soap', 'openssl', 'simplexml', 'zip', 'phar', 'dom');
+        $missingExts = array();
+        foreach ($reqExts as $ext) {
+            if (!extension_loaded($ext)) {
+                $missingExts[] = $ext;
+            }
+        }
+        $checks[] = array(
+            'id' => 'php_and_extensions',
+            'label' => 'PHP 8.2–8.5 Runtime & Required Extensions',
+            'status' => ($phpOk && empty($missingExts)) ? 'PASS' : 'FAIL',
+            'detail' => 'PHP ' . PHP_VERSION . (empty($missingExts) ? ' (all 9 extensions loaded)' : (' — missing: ' . implode(', ', $missingExts))),
+        );
+
+        // 4. All 27 new QloApps 1.8.0 tables
+        $expected180Tables = array(
+            'business_source', 'business_source_lang', 'source', 'source_lang',
+            'room_type_selling_object', 'room_type_selling_object_lang', 'cart_rule_hotel',
+            'tax_configuration', 'tax_validity_range', 'tax_price_tier', 'tax_child_range',
+            'order_tax_detail', 'order_tax_exemption', 'htl_image_category',
+            'htl_image_category_lang', 'htl_amenity', 'htl_amenity_lang',
+            'htl_property_type', 'htl_property_type_lang', 'htl_branch_amenity',
+            'htl_room_type_amenity', 'htl_booking_status', 'htl_booking_status_lang',
+            'htl_booking_status_history', 'htl_header_image', 'htl_header_image_lang',
+            'htl_connected_room',
+        );
+        $missing180Tables = array();
+        foreach ($expected180Tables as $st) {
+            if (!$this->hasTable($st)) {
+                $missing180Tables[] = $this->prefix . $st;
+            }
+        }
+        $checks[] = array(
+            'id' => 'new_180_tables',
+            'label' => 'All 27 New QloApps 1.8.0 Tables Present',
+            'status' => empty($missing180Tables) ? 'PASS' : 'FAIL',
+            'detail' => (count($expected180Tables) - count($missing180Tables)) . ' / ' . count($expected180Tables) . ' present'
+                . (empty($missing180Tables) ? '' : (' — missing: ' . implode(', ', $missing180Tables))),
+        );
+
+        // 5. All 23 new QloApps 1.8.0 columns
+        $expected180Cols = array(
+            array('access', 'kpi'),
+            array('cart_rule', 'hotel_restriction'),
+            array('customer', 'id_country'),
+            array('feature', 'logo_type'),
+            array('feature', 'logo'),
+            array('feature', 'is_featured'),
+            array('order_detail', 'id_tourism_tax_rule_group'),
+            array('order_payment_detail', 'receipt_number'),
+            array('order_return', 'event_type'),
+            array('order_slip', 'remark'),
+            array('orders', 'id_source'),
+            array('product', 'id_tourism_tax_rules_group'),
+            array('product', 'id_selling_object'),
+            array('product_shop', 'id_tourism_tax_rules_group'),
+            array('tax', 'is_tourism_tax'),
+            array('tax_rules_group', 'is_tourism_tax_rule_group'),
+            array('htl_booking_detail', 'selling_object_name'),
+            array('htl_booking_detail', 'selling_object_plural_name'),
+            array('htl_booking_detail', 'property_type_name'),
+            array('htl_branch_info', 'id_property_type'),
+            array('htl_branch_info', 'tourism_tax_collection_type'),
+            array('htl_image', 'id_htl_image_category'),
+            array('htl_room_type', 'id_selling_object'),
+        );
+        $missing180Cols = array();
+        foreach ($expected180Cols as $pair) {
+            if (!$this->hasColumn($pair[0], $pair[1])) {
+                $missing180Cols[] = $pair[0] . '.' . $pair[1];
+            }
+        }
+        $checks[] = array(
+            'id' => 'new_180_columns',
+            'label' => 'All 23 New QloApps 1.8.0 Columns Present',
+            'status' => empty($missing180Cols) ? 'PASS' : 'FAIL',
+            'detail' => (count($expected180Cols) - count($missing180Cols)) . ' / ' . count($expected180Cols) . ' present'
+                . (empty($missing180Cols) ? '' : (' — missing: ' . implode(', ', $missing180Cols))),
+        );
+
+        // 6. Bcrypt varchar(60) & payment decimal(20,6) widening
+        $widenIssues = array();
+        foreach (array('employee', 'customer', 'referrer') as $pt) {
+            $tFull = $this->prefix . $pt;
+            $cType = isset($this->columns[$tFull]['passwd']['type']) ? $this->columns[$tFull]['passwd']['type'] : '';
+            if (!preg_match('/varchar\((\d+)\)/i', $cType, $m) || (int) $m[1] < 60) {
+                $widenIssues[] = $pt . '.passwd=' . $cType;
+            }
+        }
+        foreach (array('order_payment', 'order_payment_detail') as $amtTbl) {
+            $tFull = $this->prefix . $amtTbl;
+            $cType = isset($this->columns[$tFull]['amount']['type']) ? strtolower($this->columns[$tFull]['amount']['type']) : '';
+            if ($cType !== 'decimal(20,6)') {
+                $widenIssues[] = $amtTbl . '.amount=' . $cType;
+            }
+        }
+        $checks[] = array(
+            'id' => 'bcrypt_and_decimal_widening',
+            'label' => 'Bcrypt Password (varchar>=60) & Payment Amount (decimal 20,6)',
+            'status' => empty($widenIssues) ? 'PASS' : 'FAIL',
+            'detail' => empty($widenIssues)
+                ? 'employee/customer/referrer passwd varchar(60)+ & order_payment* decimal(20,6) verified'
+                : ('Issues: ' . implode(', ', $widenIssues)),
+        );
+
+        // 7. Core 1.8.0 signature files + Ghana GHS pack
+        $sigFiles = array(
+            'classes/PasswordHashing.php',
+            'classes/PrestaShopAutoload.php',
+            'tools/defuse/php-encryption/defuse-crypto.phar',
+            'modules/hotelreservationsystem/classes/HotelHeaderImage.php',
+            'modules/hotelreservationsystem/classes/HotelAmenities.php',
+            'localization/gh.xml',
+        );
+        $missingSigFiles = array();
+        foreach ($sigFiles as $sf) {
+            if (!is_file($root . '/' . $sf)) {
+                $missingSigFiles[] = $sf;
+            }
+        }
+        $checks[] = array(
+            'id' => 'core_180_files_and_ghana_pack',
+            'label' => '1.8.0 Signature Classes, Crypto Library & Ghana Pack (gh.xml)',
+            'status' => empty($missingSigFiles) ? 'PASS' : 'FAIL',
+            'detail' => empty($missingSigFiles)
+                ? 'All 6 signature 1.8.0 & localization files verified on disk'
+                : ('Missing: ' . implode(', ', $missingSigFiles)),
+        );
+
+        // 8. Admin search_form.tpl XSS patch
+        $searchFormPath = $adminDir . '/themes/default/template/search_form.tpl';
+        $searchFormRaw = is_file($searchFormPath) ? (string) @file_get_contents($searchFormPath) : '';
+        $xssPatched = (strpos($searchFormRaw, 'bo_query|escape') !== false);
+        $checks[] = array(
+            'id' => 'admin_search_xss_patch',
+            'label' => 'Back-Office Reflected XSS Fix (search_form.tpl)',
+            'status' => $xssPatched ? 'PASS' : 'WARN',
+            'detail' => $xssPatched
+                ? '{$bo_query|escape:\'html\':\'UTF-8\'} verified in live admin template'
+                : 'Unescaped {$bo_query} found in admin search_form.tpl',
+        );
+
+        // 9. Installer, CHANGELOG & staging directory cleanup
+        $leftovers = array();
+        if (is_dir($root . '/install')) {
+            $leftovers[] = 'install/';
+        }
+        if (is_dir($root . '/install-dev')) {
+            $leftovers[] = 'install-dev/';
+        }
+        if (is_file($root . '/CHANGELOG.txt')) {
+            $leftovers[] = 'CHANGELOG.txt';
+        }
+        if (is_dir($root . '/cache/lvh_stage_180')) {
+            $leftovers[] = 'cache/lvh_stage_180/';
+        }
+        $backupHtaccess = is_file($adminDir . '/backups/lvh_upgrade_170/.htaccess');
+        $rollbackScriptArmed = is_file($adminDir . '/lvh-emergency-rollback.php');
+        $checks[] = array(
+            'id' => 'installer_and_staging_cleanup',
+            'label' => 'Installer, CHANGELOG & Staging Directory Cleanup',
+            'status' => empty($leftovers) ? 'PASS' : 'WARN',
+            'detail' => empty($leftovers)
+                ? ('install/, CHANGELOG.txt & cache/lvh_stage_180 absent; backup .htaccess=' . ($backupHtaccess ? 'protected' : 'n/a') . '; emergency rollback=' . ($rollbackScriptArmed ? 'armed' : 'removed'))
+                : ('Leftover paths present: ' . implode(', ', $leftovers)),
+        );
+
+        // 10. CVE-2025-67325 (qlohotelreview) & DB-only orphan cleanup
+        if ($this->lastModulesAudit === null) {
+            $this->collectModules();
+        }
+        $revActive = !empty($this->lastModulesAudit['security_watch_qlohotelreview']['active_in_db']);
+        $orphanCnt = isset($this->lastModulesAudit['counts']['db_only_orphans'])
+            ? (int) $this->lastModulesAudit['counts']['db_only_orphans']
+            : 0;
+        $checks[] = array(
+            'id' => 'cve_and_orphan_modules',
+            'label' => 'CVE-2025-67325 Watch (qlohotelreview) & Orphan Modules',
+            'status' => (!$revActive && $orphanCnt === 0) ? 'PASS' : 'WARN',
+            'detail' => 'qlohotelreview=' . ($revActive ? 'ACTIVE' : 'disabled') . ', DB-only orphan modules=' . $orphanCnt,
+        );
+
+        // 11. Amenities & Homepage Hero Media migration
+        $amenityCnt = $this->hasTable('htl_amenity') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('htl_amenity')) : 0;
+        $branchAmenCnt = $this->hasTable('htl_branch_amenity') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('htl_branch_amenity')) : 0;
+        $roomAmenCnt = $this->hasTable('htl_room_type_amenity') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('htl_room_type_amenity')) : 0;
+        $headerRows = $this->hasTable('htl_header_image')
+            ? $this->queryRows('SELECT id_header_image, name, active FROM ' . $this->tbl('htl_header_image'))
+            : array();
+        $missingHeaderFiles = array();
+        foreach ($headerRows as $hr) {
+            if (!empty($hr['name']) && !is_file(_PS_IMG_DIR_ . 'hotel_header_media/' . $hr['name'])) {
+                $missingHeaderFiles[] = $hr['name'];
+            }
+        }
+        $checks[] = array(
+            'id' => 'amenities_and_hero_media',
+            'label' => 'Hotel Amenities & Homepage Hero Media (htl_header_image)',
+            'status' => ($amenityCnt > 0 && count($headerRows) > 0 && empty($missingHeaderFiles)) ? 'PASS' : 'WARN',
+            'detail' => sprintf(
+                '%d amenities (%d hotel links, %d room-type links); %d hero image row(s)%s',
+                $amenityCnt,
+                $branchAmenCnt,
+                $roomAmenCnt,
+                count($headerRows),
+                empty($missingHeaderFiles) ? ' (all files on disk)' : (' — missing file(s): ' . implode(', ', $missingHeaderFiles))
+            ),
+        );
+
+        // 12. Preserved Hotel Data & Relational Integrity
+        $ordersCnt = $this->hasTable('orders') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('orders')) : 0;
+        $guestsCnt = $this->hasTable('customer') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('customer')) : 0;
+        $paymentsCnt = $this->hasTable('order_payment') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('order_payment')) : 0;
+        $roomsCnt = $this->hasTable('htl_room_information') ? (int) $this->queryValue('SELECT COUNT(*) FROM ' . $this->tbl('htl_room_information')) : 0;
+        $orphanBookings = ($this->hasTable('htl_booking_detail') && $this->hasTable('orders'))
+            ? (int) $this->queryValue(
+                'SELECT COUNT(*) FROM ' . $this->tbl('htl_booking_detail') . ' bd
+                 LEFT JOIN ' . $this->tbl('orders') . ' o ON (o.id_order = bd.id_order)
+                 WHERE bd.id_order > 0 AND o.id_order IS NULL'
+            )
+            : 0;
+        $orphanRoomTypes = ($this->hasTable('htl_room_type') && $this->hasTable('product'))
+            ? (int) $this->queryValue(
+                'SELECT COUNT(*) FROM ' . $this->tbl('htl_room_type') . ' rt
+                 LEFT JOIN ' . $this->tbl('product') . ' p ON (p.id_product = rt.id_product)
+                 WHERE p.id_product IS NULL'
+            )
+            : 0;
+        $checks[] = array(
+            'id' => 'data_and_relational_integrity',
+            'label' => 'Bookings, Guests, Payments & Room Relational Integrity',
+            'status' => ($ordersCnt > 0 && $orphanBookings === 0 && $orphanRoomTypes === 0) ? 'PASS' : 'WARN',
+            'detail' => sprintf(
+                '%d bookings, %d guests, %d payments, %d physical rooms; orphan booking_detail=%d, orphan room_type=%d',
+                $ordersCnt,
+                $guestsCnt,
+                $paymentsCnt,
+                $roomsCnt,
+                $orphanBookings,
+                $orphanRoomTypes
+            ),
+        );
+
+        // 13. Bundled active module DB vs Disk version parity
+        $versionDrift = array();
+        if (!empty($this->lastModulesAudit['all_modules'])) {
+            foreach ($this->lastModulesAudit['all_modules'] as $m) {
+                if (!empty($m['active_in_db']) && $m['origin'] === 'upstream_qloapps') {
+                    if ((string) $m['db_version'] !== (string) $m['disk_version'] && $m['disk_version'] !== '') {
+                        $versionDrift[] = $m['name'] . ' (db=' . $m['db_version'] . ' vs disk=' . $m['disk_version'] . ')';
+                    }
+                }
+            }
+        }
+        $checks[] = array(
+            'id' => 'module_version_parity',
+            'label' => 'Active Upstream Module Version Parity (DB vs Disk)',
+            'status' => empty($versionDrift) ? 'PASS' : 'WARN',
+            'detail' => empty($versionDrift)
+                ? 'All active upstream modules match their 1.8.0 disk version'
+                : ('Version drift: ' . implode(', ', $versionDrift)),
+        );
+
+        // 14. Public Storefront Live vs Maintenance Mode + HTTPS
+        $shopLive = (bool) Configuration::get('PS_SHOP_ENABLE');
+        $sslEverywhere = (bool) Configuration::get('PS_SSL_ENABLED') && (bool) Configuration::get('PS_SSL_ENABLED_EVERYWHERE');
+        $devMode = defined('_PS_MODE_DEV_') ? (bool) _PS_MODE_DEV_ : false;
+        $checks[] = array(
+            'id' => 'storefront_live_and_https',
+            'label' => 'Public Hotel Storefront, HTTPS & Production Debug Mode',
+            'status' => ($shopLive && $sslEverywhere && !$devMode) ? 'PASS' : 'WARN',
+            'detail' => 'Storefront=' . ($shopLive ? 'LIVE (open to guests)' : 'MAINTENANCE MODE (remember to re-open when ready)')
+                . ', SSL Everywhere=' . ($sslEverywhere ? 'ON' : 'OFF')
+                . ', _PS_MODE_DEV_=' . ($devMode ? 'ON (turn off!)' : 'OFF'),
+        );
+
+        $passCnt = 0;
+        $warnCnt = 0;
+        $failCnt = 0;
+        foreach ($checks as $c) {
+            if ($c['status'] === 'PASS') {
+                $passCnt++;
+            } elseif ($c['status'] === 'WARN') {
+                $warnCnt++;
+            } else {
+                $failCnt++;
+            }
+        }
+
+        return array(
+            'summary' => array(
+                'total_checks' => count($checks),
+                'passed' => $passCnt,
+                'warnings' => $warnCnt,
+                'failed' => $failCnt,
+                'overall_status' => ($failCnt > 0) ? 'FAIL' : (($warnCnt > 0) ? 'WARN' : 'PASS'),
+            ),
+            'checks' => $checks,
+            'missing_180_tables' => $missing180Tables,
+            'missing_180_columns' => $missing180Cols,
+            'module_version_drift' => $versionDrift,
+        );
     }
 
     /* ======================================================================
