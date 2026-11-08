@@ -214,8 +214,13 @@ echo "-- 4/4 columns whose type differs: ${MISMATCH_COUNT} (left untouched, list
 # reference install. Streamed through the container so the dump never has to be
 # written to the host twice.
 if [ "${#MISSING_TABLES[@]}" -gt 0 ]; then
+    # --skip-extended-insert puts one INSERT per row instead of one huge
+    # multi-row statement, so a single badly escaped value costs one row and
+    # names itself in the error, rather than poisoning a whole table's data.
+    # --hex-blob removes another class of escaping problem entirely.
     "$ENG" exec -i qlo-db sh -c "
         mariadb-dump -u'${ROOT_USER}' -p'${ROOT_PASS}' --single-transaction --skip-add-drop-table \
+            --skip-extended-insert --hex-blob --no-tablespaces \
             --default-character-set='${CHARSET}' '${REF}' ${MISSING_TABLES[*]}
     " >> "$OUT_FILE"
 fi
@@ -236,7 +241,30 @@ rm -f "$ALTERS_FILE" "$MISMATCH_FILE"
 # --------------------------------------------------------------------------
 echo
 echo "Applying ${OUT_FILE} to ${DST} ..."
-"$ENG" exec -i qlo-db sh -c "mariadb -u'${ROOT_USER}' -p'${ROOT_PASS}' --default-character-set='${CHARSET}' '${DST}'" < "$OUT_FILE"
+ERR_FILE="${OUT_DIR}/apply-errors.log"
+: > "$ERR_FILE"
+
+# --force is not optional here. On the first run the client hit one statement it
+# could not parse ("ERROR at line 1190: Unknown command '\\'") and stopped dead,
+# which silently threw away every ALTER TABLE after it - all 31 new columns. The
+# site still booted because the dashboard does not query those columns, so the
+# damage was invisible. With --force every applicable statement is applied and
+# each failure is reported, then verified by the counts below.
+set +e
+"$ENG" exec -i qlo-db sh -c "mariadb -u'${ROOT_USER}' -p'${ROOT_PASS}' --force --default-character-set='${CHARSET}' '${DST}'" < "$OUT_FILE" 2> "$ERR_FILE"
+set -e
+
+grep -v "Using a password on the command line" "$ERR_FILE" > "${ERR_FILE}.tmp" 2>/dev/null || true
+mv -f "${ERR_FILE}.tmp" "$ERR_FILE"
+if [ -s "$ERR_FILE" ]; then
+    ERR_COUNT="$(grep -c . "$ERR_FILE" || true)"
+    echo
+    echo "!! ${ERR_COUNT} statement(s) failed while applying - the rest were applied anyway."
+    head -20 "$ERR_FILE"
+    echo "!! full list: ${ERR_FILE}"
+else
+    rm -f "$ERR_FILE"
+fi
 
 TABLES_AFTER="$(sql -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DST}' AND table_type='BASE TABLE';")"
 STILL_MISSING="$(sql -e "
@@ -244,15 +272,33 @@ STILL_MISSING="$(sql -e "
     WHERE t.TABLE_SCHEMA='${REF}' AND t.TABLE_TYPE='BASE TABLE'
       AND NOT EXISTS (SELECT 1 FROM information_schema.TABLES x
                       WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=t.TABLE_NAME);")"
+COLS_STILL_MISSING="$(sql -e "
+    SELECT COUNT(*) FROM information_schema.COLUMNS c
+    WHERE c.TABLE_SCHEMA='${REF}'
+      AND EXISTS (SELECT 1 FROM information_schema.TABLES x
+                  WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=c.TABLE_NAME)
+      AND NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS y
+                      WHERE y.TABLE_SCHEMA='${DST}' AND y.TABLE_NAME=c.TABLE_NAME
+                        AND y.COLUMN_NAME=c.COLUMN_NAME);")"
 
 echo
 echo "== done."
 echo "   ${DST}: ${TABLES_BEFORE} -> ${TABLES_AFTER} tables (+$((TABLES_AFTER - TABLES_BEFORE)))"
-echo "   columns added: ${ALTER_COUNT}"
-echo "   type differences left alone: ${MISMATCH_COUNT} (grep '^-- DIFFERS' ${OUT_FILE})"
-echo "   tables still missing vs 1.8.0: ${STILL_MISSING}"
+echo "   tables still missing vs 1.8.0 : ${STILL_MISSING}   (want 0)"
+echo "   columns still missing vs 1.8.0: ${COLS_STILL_MISSING}   (want 0)"
+echo "   type differences left alone   : ${MISMATCH_COUNT} (grep '^-- DIFFERS' ${OUT_FILE})"
 echo
 echo "Next:"
 echo "   dev/scripts/use-db.sh 18"
+echo "   podman-compose exec app php dev/scripts/set-admin-password.php you@example.com 'YourLocalPassword'"
+echo "       (${DST} was rebuilt from the 1.7.0 copy, so any password you set"
+echo "        on a previous run is gone and must be set again.)"
 echo "   then open http://localhost:8080/admin-dev/ and send me any error with:"
 echo "   podman-compose logs app | tail -40"
+
+if [ "$STILL_MISSING" != "0" ] || [ "$COLS_STILL_MISSING" != "0" ]; then
+    echo
+    echo "WARNING: the schema is still incomplete. Send me the failing lines from"
+    echo "         ${ERR_FILE} - do not trust the data until both counts are 0."
+    exit 2
+fi
