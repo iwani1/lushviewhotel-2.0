@@ -221,6 +221,39 @@ asks.
 
 ---
 
+## 9. Decide whether the back office should keep reporting to api.qloapps.com  —  ~10 minutes, owner only
+
+**Why.** The admin panel fetches its promotional banner from `api.qloapps.com`
+once a day (`Tools::addonsRequest()`, `classes/Tools.php:3375`). Every request
+through that function — the banner, the daily version check, and the module and
+theme catalogues — posts the shop domain, the SSL domain, the install path,
+`PS_SHOP_EMAIL` (the business email address), the QloApps version, the language
+and the country to a third party. There is no configuration switch:
+`Tools::$is_addons_up` is a protected static that only changes when a request
+fails. Item 5 stops publishing the version fingerprint to visitors; this is the
+same information being volunteered outbound.
+
+**Do.** The advertising itself is already blocked by the `lvhadminclean` module
+(see `docs/project/07-backoffice-ads.md`), which stops the banner request and
+therefore most of the disclosure. To stop all of it, choose one:
+
+- a host-level outbound firewall rule denying `api.qloapps.com` — no code
+  change, survives every upgrade; or
+- a one-line core change, `classes/Tools.php:3374` `= true` → `= false` — needs
+  re-applying after each upgrade, and disables the Modules Catalog, the Themes
+  catalog and the upgrade notices.
+
+**Verify.** No request to `api.qloapps.com` appears in the browser developer
+tools or the server's outbound logs while you use the back office, and
+`cache/dashboard_recommendation.html` is never re-created after you delete it.
+
+**Risk if skipped.** Low severity but continuous: the shop's identity, contact
+email and exact software version are disclosed daily to a third party — exactly
+the reconnaissance item 5 exists to prevent. The cost of blocking everything is
+that modules and themes can no longer be installed from inside the back office.
+
+---
+
 ## Already closed by this project (no action needed)
 
 - The committed export was purged from branch history and the purge verified
@@ -232,12 +265,15 @@ asks.
   repository or the export.
 - The local development environment never contacts production: the import
   script has no host parameter and the password tool refuses non-local hosts.
+- The back-office advertising banner is blocked and the cached ad HTML deleted
+  by the `lvhadminclean` module, with no application file edited; item 9 covers
+  the remaining outbound traffic.
 - All four recent upstream CVE fixes are present in the 1.8.0 tree used for
   local development; item 4 addresses the one module still exposed on 1.7.0.
 
 ## Order of work, one line
 
 1 today (public exposure), 2 and 4 this week (broken account, unpatched
-module), 5 and 7 this week (fingerprints, identity), 3 paired with 6 in the
-next maintenance window (hash scheme and column width move together), 8
-whenever policy time exists.
+module), 5, 7 and 9 this week (fingerprints, identity, outbound disclosure),
+3 paired with 6 in the next maintenance window (hash scheme and column width
+move together), 8 whenever policy time exists.
