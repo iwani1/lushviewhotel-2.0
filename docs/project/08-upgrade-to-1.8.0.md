@@ -63,6 +63,32 @@ Then open `http://localhost:8080/admin-dev/`. If anything 500s:
 podman-compose logs app | tail -40
 ```
 
+## Result of the first successful run (2026-11-08)
+
+```
+300 tables copied from qloapps_live
+missing tables: 32   -> created, with reference rows from qloapps_fresh
+missing columns: 31  -> added with 1.8.0's definitions
+type differences: 3  -> reported, not changed
+tables still missing vs 1.8.0 : 0
+columns still missing vs 1.8.0: 0
+apply errors: 0
+```
+
+`qloapps_18` is now schema-complete against a real 1.8.0 install, and the back
+office serves the production data: the dashboard, the bookings list and every
+stats KPI (`today_arrivals`, `occupied_rooms`, `total_due_amount`,
+`average_order_value`, `conversion_rate`) all return 200 with no PHP fatals.
+
+Two generator bugs had to be fixed to get there, both in how a column default is
+re-read from `information_schema`: MariaDB 10.2+ returns `COLUMN_DEFAULT` as a
+literal expression, so a varchar default arrives already wrapped in quotes and
+an explicit `DEFAULT NULL` arrives as the string `NULL`. Quoting either produced
+statements the client could not parse, and because the client stops at the first
+error, one bad line silently discarded every `ALTER TABLE` after it. The apply
+now runs with `--force` and reports both counts, so an incomplete schema can
+never pass unnoticed again.
+
 ## Not handled yet (phase 2, only if a page needs it)
 
 - New **rows** in tables that both versions have — hooks, tabs, meta. A missing
