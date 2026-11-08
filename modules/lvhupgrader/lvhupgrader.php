@@ -51,7 +51,7 @@ class LvhUpgrader extends Module
     {
         $this->name = 'lvhupgrader';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -304,7 +304,9 @@ class LvhUpgrader extends Module
 
         foreach ($tableNames as $tbl) {
             $safeTbl = str_replace('`', '``', $tbl);
-            $createRow = $db->getRow('SHOW CREATE TABLE `' . $safeTbl . '`');
+            // Use executeS (never getRow, which appends `LIMIT 1` and breaks `SHOW CREATE TABLE`)
+            $createRows = $db->executeS('SHOW CREATE TABLE `' . $safeTbl . '`', true, false);
+            $createRow = (is_array($createRows) && !empty($createRows[0])) ? $createRows[0] : null;
             $createSql = '';
             if (is_array($createRow)) {
                 foreach ($createRow as $k => $v) {
@@ -727,10 +729,16 @@ PHP;
             if ($stmt === '') {
                 continue;
             }
-            if (!$db->execute($stmt)) {
-                $errors[] = substr($stmt, 0, 140) . ' :: ' . $db->getMsgError();
-            } else {
-                $executed++;
+            try {
+                if (!$db->execute($stmt, false)) {
+                    $errors[] = substr($stmt, 0, 140) . ' :: ' . $db->getMsgError();
+                } else {
+                    $executed++;
+                }
+            } catch (Exception $ex) {
+                $errors[] = substr($stmt, 0, 140) . ' :: ' . $ex->getMessage();
+            } catch (Throwable $th) {
+                $errors[] = substr($stmt, 0, 140) . ' :: ' . $th->getMessage();
             }
         }
 
@@ -902,7 +910,8 @@ PHP;
         }
 
         $dbVer = (string) Db::getInstance()->getValue(
-            "SELECT `value` FROM `" . _DB_PREFIX_ . "configuration` WHERE `name` = 'QLO_VERSION_DB' LIMIT 1"
+            "SELECT `value` FROM `" . _DB_PREFIX_ . "configuration` WHERE `name` = 'QLO_VERSION_DB'",
+            false
         );
         if ($dbVer !== '1.8.0.0') {
             echo json_encode(array('ok' => false, 'error' => 'Database has not been upgraded to 1.8.0.0 yet. Run Step 3 first.'));
@@ -1280,7 +1289,7 @@ PHP;
         $stageReady = is_file($stageBase . '/stage_ready.json');
 
         $qloCodeVer = defined('_QLO_VERSION_') ? _QLO_VERSION_ : _PS_VERSION_;
-        $qloDbVer = (string) $db->getValue("SELECT `value` FROM `" . bqSQL($p . 'configuration') . "` WHERE `name` = 'QLO_VERSION_DB' LIMIT 1");
+        $qloDbVer = (string) $db->getValue("SELECT `value` FROM `" . bqSQL($p . 'configuration') . "` WHERE `name` = 'QLO_VERSION_DB'", false);
 
         return array(
             'qlo_code_version' => $qloCodeVer,
@@ -1296,12 +1305,12 @@ PHP;
             'admin_folder' => basename($adminDir),
             'shop_enabled' => (int) Configuration::get('PS_SHOP_ENABLE'),
             'client_ip' => Tools::getRemoteAddr(),
-            'bookings' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'orders') . '`'),
-            'guests' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'customer') . '`'),
-            'payments' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'order_payment') . '`'),
-            'rooms' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_room_information') . '`'),
-            'staff' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'employee') . '`'),
-            'tables_total' => (int) $db->getValue("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'"),
+            'bookings' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'orders') . '`', false),
+            'guests' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'customer') . '`', false),
+            'payments' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'order_payment') . '`', false),
+            'rooms' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_room_information') . '`', false),
+            'staff' => (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'employee') . '`', false),
+            'tables_total' => (int) $db->getValue("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'", false),
             'has_db_backup' => is_file($sqlFile) || is_file($gzFile),
             'db_backup_mb' => is_file($gzFile) ? round(filesize($gzFile) / 1048576, 2) : (is_file($sqlFile) ? round(filesize($sqlFile) / 1048576, 2) : 0),
             'has_file_backup' => is_file($coreZip),
