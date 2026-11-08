@@ -51,33 +51,55 @@ Nothing here changes anything. Every query runs against the **local copy**.
 - [ ] **1.1 Make the GitHub repository private** (security runbook item 1). You
       will be moving code and database files around; the repo currently exposes
       the schema and a purged-but-fetchable export.
-- [ ] **1.2 Inspect the three type differences** the migration refused to
-      change. On your machine:
-      ```bash
-      grep '^-- DIFFERS' dev/migrations/generated/002_qloapps_live_to_1_8_0.sql
+- [x] **1.2 Inspect the three type differences** the migration refused to
+      change — **verified 2026-11-08**:
+      ```text
+      -- DIFFERS  qlo_order_payment.amount: 1.8.0 decimal(20,6)  vs  copy decimal(10,2)
+      -- DIFFERS  qlo_order_payment_detail.amount: 1.8.0 decimal(20,6)  vs  copy decimal(10,2)
+      -- DIFFERS  qlo_referrer.passwd: 1.8.0 varchar(60)  vs  copy varchar(32)
       ```
-      If these are the money columns (`decimal(10,2)` on payments against
-      `decimal(20,6)` on order lines, audit row A27), decide now whether to
-      convert them in the same window. Do not discover this mid-upgrade.
-- [ ] **1.3 Inventory the modules that matter.** Locally:
-      ```bash
-      podman-compose exec db mariadb -uroot -pqlo_root_dev_only -t -e "
-        SELECT name, version, active FROM qloapps_live.qlo_module
-        WHERE name IN ('cashpayment','qlohotelreview',
-                       'qlochannelmanagerconnector','qlocmconnector',
-                       'qlocrontaskmanager','hotelreservationsystem')
-        ORDER BY name;"
+      - `qlo_referrer.passwd` (`0` rows on live, `DEFAULT NULL`) was the third
+        and final `passwd` column missed by the initial migration 001;
+        `AdminController::copyFromPost()` writes 60-character bcrypt to it just
+        like `employee` and `customer`. **Folded into
+        `dev/migrations/001_widen_password_columns.up.sql`.**
+      - `qlo_order_payment.amount` and `qlo_order_payment_detail.amount` (2,058
+        rows each) are the audit-row A27 money columns. Converting `decimal(10,2)`
+        → `decimal(20,6)` widens **both** sides of the decimal point (`8 → 14`
+        integer digits, `2 → 6` fractional digits), so every existing payment
+        value is preserved identically with zero rounding or truncation, and
+        new payments match `qlo_orders.total_paid_real` (`decimal(20,6)`).
+        **Approved 2026-11-08 — added as
+        `dev/migrations/003_widen_payment_amounts.up.sql` (step 3.3b), bringing
+        remaining `-- DIFFERS` count to 0.**
+- [x] **1.3 Inventory the modules that matter** — **verified 2026-11-08**:
+      ```text
+      cashpayment                | 2.6.8 | active=1
+      qlochannelmanagerconnector | 1.0.1 | active=1
+      qlohotelreview             | 1.0.2 | active=1
+      (qlocmconnector, qlocrontaskmanager: not in qlo_module, new in 1.8.0)
       ```
-      - `cashpayment` — **your custom payment module, and the single biggest
-        risk in this upgrade.** It exists nowhere except the live server, it was
-        written for 1.7.0, and 2,058 payments depend on it. It must be tested on
-        a staging copy before production (step 4.4).
-      - `qlohotelreview` — the module with the unpatched CVE on 1.7.0 (security
-        runbook item 4). Upgrading to 1.8.0 closes that item.
-      - `qlochannelmanagerconnector` — 1.8.0 replaces it with `qlocmconnector`.
-        If it is `active=1`, any OTA connected through it will need
-        reconfiguration. Confirm with the channel-manager provider before
-        scheduling.
+      - `cashpayment` (`2.6.8`, matches upstream `cheque` `2.6.8`) — **active on
+        live and still the single biggest code risk.** Copy
+        `public_html/modules/cashpayment/` from cPanel now and test a booking
+        against `qloapps_18` locally before the window, then carry it in 4.3.
+      - `qlohotelreview` (`1.0.2`, `active=1`, `0` review rows) — confirmed on
+        the vulnerable pre-1.8.0 version (CVE-2025-67325). **Disable it on the
+        live 1.7.0 site now** (security runbook item 4); 1.8.0 ships `1.0.3`.
+      - `qlochannelmanagerconnector` (`1.0.1`, `active=1`) — `qlo_qcmc_channel_manager_booking`
+        and `qlo_webservice_account` both hold **0 rows**, so no OTA is pushing
+        bookings unless configured out-of-band (confirm once with staff).
+        **1.8.0 quirk:** `qlocmconnector::removeOldChannelManagerConnectorModule()`
+        (`modules/qlocmconnector/qlocmconnector.php:1244-1256`) calls
+        `Module::getInstanceByName('qlochannelmanagerconnector')->uninstall()`,
+        which returns `false` on a clean 1.8.0 tree because that directory no
+        longer exists on disk — leaving dead rows in `qlo_module`,
+        `qlo_module_shop` and `qlo_hook_module` (and a broken sidebar tab until
+        `qlocmconnector` is installed in 6.1).
+      - `qlocrontaskmanager` (`1.0.0`, new in 1.8.0) — `upgrade-live-copy.sh`
+        now dumps `qlo_qctm_cron_task` structure-only (`--no-data`) so
+        `qloapps_fresh`'s `id_module` numbers do not leak into the copy before
+        6.1 installs the module. Regenerate `002` locally before section 3.
 - [ ] **1.4 Find every non-standard file on the live server.** In cPanel File
       Manager, compare `public_html/modules/` and `public_html/override/`
       against this repository's `modules/` and `override/`. Anything on live that
@@ -122,18 +144,25 @@ Nothing here changes anything. Every query runs against the **local copy**.
 - [ ] **3.2** phpMyAdmin → select the new database → Import → the export from
       2.2. This is a copy of production; production itself is not touched.
 - [ ] **3.3 Apply the password-column migration FIRST.** This is audit row A29
-      and it is not optional. Live stores `qlo_employee.passwd` and
-      `qlo_customer.passwd` as `varchar(32)` — exactly an MD5 digest — while
-      1.8.0 writes bcrypt at 60 characters and re-hashes on every successful
-      login (`Employee.php:303-305`, `Customer.php:413-415`). With a 32-character
+      and it is not optional. Live stores `qlo_employee.passwd`,
+      `qlo_customer.passwd` and `qlo_referrer.passwd` as `varchar(32)` — exactly
+      an MD5 digest — while 1.8.0 writes bcrypt at 60 characters and re-hashes
+      on every successful login (`Employee.php:303-305`, `Customer.php:413-415`,
+      and `AdminController.php:3932-3935` for `Referrer`). With a 32-character
       column the new hash is truncated, `isPrimaryHash()` then reports the
       account as already migrated, and **the account is permanently locked out**.
       That is 1,257 customers and 15 employees.
       Run `dev/migrations/001_widen_password_columns.up.sql` from this repository
       against the new database (phpMyAdmin → SQL → paste the file contents).
+- [ ] **3.3b Widen the two payment amount columns.** Run
+      `dev/migrations/003_widen_payment_amounts.up.sql` against the new database
+      (phpMyAdmin → SQL → paste the file contents). This widens
+      `qlo_order_payment.amount` and `qlo_order_payment_detail.amount` from
+      `decimal(10,2)` to `decimal(20,6)` losslessly across all 2,058 payment
+      rows so they match `qlo_orders` and `qlo_order_detail` (audit row A27).
 - [ ] **3.4 Apply the schema delta**: phpMyAdmin → new database → Import →
       `dev/migrations/generated/002_qloapps_live_to_1_8_0.sql` from your laptop.
-      Same order as the local rehearsal: 001, then the delta.
+      Same order as the local rehearsal: `001` → `003` → `002`.
 - [ ] **3.5 Verify the copy matches 1.8.0** — both numbers must be 0:
       ```sql
       SELECT
@@ -319,9 +348,9 @@ least two weeks.
 | Risk | Likelihood | Mitigation |
 | --- | --- | --- |
 | `cashpayment` breaks on 1.8.0 | **Medium-high** — it is 1.7.0-era custom code with no maintainer | Test on staging (4.5). If it fails, the fix is a small module patch; the payments data is unaffected either way |
-| Channel-manager/OTA connections drop | Medium if `qlochannelmanagerconnector` is active | 1.3 identifies it; confirm with the provider before the window |
+| Channel-manager/OTA connections drop | Low (`qlochannelmanagerconnector` is `active=1`, but 0 bookings and 0 API keys exist in the dump) | Confirm once with staff; install `qlocmconnector` in 6.1 so the old sidebar tab is replaced cleanly |
 | A module's own upgrade script never ran | Medium | 6.1 upgrades every flagged module; watch for modules that stay at a 1.7.0 version number |
-| Money columns differ in precision | Known — 3 columns | 1.2 decides it in advance |
+| Money columns differ in precision | Resolved — 2 columns (`qlo_order_payment.amount`, `qlo_order_payment_detail.amount`) | Lossless widening `decimal(10,2)` → `decimal(20,6)` in step 3.3b (`003_widen_payment_amounts.up.sql`); `qlo_referrer.passwd` folded into `001` |
 | Bed-type data orphaned | Certain, small | 1.5 decides it in advance |
 | Collation mix between old and new tables | Low | 3.6 surfaces it before cutover |
 | Emails go to spam after the From address changes | Medium | 6.7 tests it; SPF on the host fixes it |

@@ -1,0 +1,24 @@
+-- Migration 003 rollback - narrow the payment amount columns back to decimal(10,2).
+--
+-- POTENTIALLY LOSSY. Safe ONLY if no row holds non-zero digits beyond two
+-- decimal places (for example from a foreign-currency payment recorded on
+-- 1.8.0) or an integer part of 8+ digits (>= 100,000,000). Run this guard
+-- FIRST:
+--
+--   SELECT 'order_payment' AS src, COUNT(*) AS would_round_or_overflow
+--     FROM qlo_order_payment
+--     WHERE amount <> ROUND(amount, 2) OR ABS(amount) >= 100000000
+--   UNION ALL
+--   SELECT 'order_payment_detail', COUNT(*)
+--     FROM qlo_order_payment_detail
+--     WHERE amount <> ROUND(amount, 2) OR ABS(amount) >= 100000000;
+--
+-- If either count is non-zero, STOP. Narrowing would round or clip real
+-- payment figures.
+--
+-- The ALTER statements are left COMMENTED OUT on purpose so that running this
+-- file blindly can never round or truncate money. Uncomment both only after
+-- the guard above returned zeros.
+
+-- ALTER TABLE `qlo_order_payment` MODIFY `amount` decimal(10,2) NOT NULL;
+-- ALTER TABLE `qlo_order_payment_detail` MODIFY `amount` decimal(10,2) NOT NULL;

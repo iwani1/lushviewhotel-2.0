@@ -1,17 +1,23 @@
 -- Migration 001 - widen the password columns so bcrypt hashes fit.
 --
 -- WHY
---   The live 1.7.0 database stores qlo_employee.passwd and qlo_customer.passwd
---   as varchar(32): the legacy MD5(_COOKIE_KEY_ . password) digest. QloApps
---   1.8.0 hashes with bcrypt via classes/PasswordHashing.php, and a bcrypt
---   hash is exactly 60 characters.
+--   The live 1.7.0 database stores three password columns as varchar(32), the
+--   width of the legacy MD5(_COOKIE_KEY_ . password) digest:
+--     - qlo_employee.passwd  varchar(32) NOT NULL      (15 rows on live)
+--     - qlo_customer.passwd  varchar(32) NOT NULL      (1,257 rows on live)
+--     - qlo_referrer.passwd  varchar(32) DEFAULT NULL  (0 rows on live)
 --
---   The rehash-on-login path (classes/Employee.php:303-305 and
---   classes/Customer.php:413-415) is UNGUARDED, and classes/db/DbPDO.php:69
---   never sets PDO::ATTR_ERRMODE, so PDO runs in ERRMODE_SILENT. Writing a
---   60-char hash into a 32-char column therefore either:
+--   QloApps 1.8.0 hashes with bcrypt via classes/PasswordHashing.php, and a
+--   bcrypt hash is exactly 60 characters. Both the rehash-on-login path
+--   (classes/Employee.php:303-305 and classes/Customer.php:413-415) and the
+--   generic back-office save path for any ObjectModel `passwd` field
+--   (classes/controller/AdminController.php:3932-3935 and
+--   classes/ObjectModel.php:1189-1193, which cover classes/Referrer.php:56)
+--   write 60-character hashes unguarded, while classes/db/DbPDO.php:69 never
+--   sets PDO::ATTR_ERRMODE, so PDO runs in ERRMODE_SILENT. Writing a 60-char
+--   hash into a 32-char column therefore either:
 --     - STRICT sql_mode : error 1406 is swallowed and the password stays MD5
---                         forever, silently; or
+--                         forever (or the Referrer save silently drops it); or
 --     - non-strict      : the hash is TRUNCATED to 32 chars, isPrimaryHash()
 --                         then reports it as already migrated, password_verify()
 --                         can never match, and the original MD5 is destroyed -
@@ -24,8 +30,10 @@
 --
 -- SAFETY
 --   Widening a varchar is lossless - every existing 32-char value still fits.
---   Reversal is dev/migrations/001_widen_password_columns.down.sql; read its
---   guard before running it.
+--   Note that qlo_referrer.passwd stays DEFAULT NULL (matching both 1.7.0 and
+--   install-dev/data/db_structure.sql:1871), whereas employee and customer stay
+--   NOT NULL. Reversal is dev/migrations/001_widen_password_columns.down.sql;
+--   read its guard before running it.
 --
 -- APPLIES TO
 --   The local development copy of the live database (qloapps_live), applied
@@ -34,3 +42,4 @@
 
 ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(60) NOT NULL;
 ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(60) NOT NULL;
+ALTER TABLE `qlo_referrer` MODIFY `passwd` varchar(60) DEFAULT NULL;

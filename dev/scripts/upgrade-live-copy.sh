@@ -15,17 +15,18 @@
 #                  schema. This is what the application is pointed at.
 #
 # What it does, in order:
-#   1. copies qloapps_live into qloapps_18 (drop and recreate, same charset)
-#   2. finds every table that exists in 1.8.0 but not in the copy, and creates
-#      it WITH the reference rows from qloapps_fresh - those are the tables
-#      1.8.0 needs populated to boot (booking statuses, business sources, cron
-#      tasks, and so on)
+#   1. copies qloapps_live into qloapps_18 (drop and recreate, same charset) and
+#      applies the approved hand-written widening migrations (001 password
+#      columns, 003 payment amount columns) to qloapps_18 - leaving qloapps_live
+#      untouched
+#   2. finds every table that exists in 1.8.0 but not in the copy, creating
+#      lookup tables WITH their reference rows from qloapps_fresh and dumping
+#      non-vocabulary/module-ID tables structure-only (--no-data)
 #   3. finds every column that exists in 1.8.0 but not in the copy, and adds it
 #      with 1.8.0's exact definition
-#   4. reports columns whose type differs between the two versions, but does
-#      NOT change them - converting live money or text columns is a decision,
-#      not a side effect
-#   5. writes everything it ran to dev/migrations/generated/ so it can be
+#   4. reports any remaining columns whose type still differs between the two
+#      versions, without changing them automatically
+#   5. writes the derived delta to dev/migrations/generated/ so it can be
 #      reviewed, and applies it
 #
 # That directory is deliberately gitignored: the output is derived from the
@@ -121,6 +122,22 @@ else
     echo "               If the site reports access denied, run this as root:" >&2
     echo "               GRANT ALL PRIVILEGES ON \`${DST}\`.* TO '${APP_USER}'@'%'; FLUSH PRIVILEGES;" >&2
 fi
+
+# Apply the committed, owner-approved column-widening migrations to ${DST}
+# before diffing against ${REF} (same order as production runbook steps 3.3 and
+# 3.3b: 001 -> 003 -> 002). ${SRC} is never written to, so you do not have to
+# re-import ${SRC} when a hand-written migration is added or extended.
+for mig in \
+    "dev/migrations/001_widen_password_columns.up.sql" \
+    "dev/migrations/003_widen_payment_amounts.up.sql"
+do
+    if [ ! -f "$mig" ]; then
+        echo "error: required migration missing: $mig" >&2
+        exit 1
+    fi
+    "$ENG" exec -i qlo-db sh -c "mariadb -u'${ROOT_USER}' -p'${ROOT_PASS}' --default-character-set='${CHARSET}' '${DST}'" < "$mig"
+    echo "      applied ${mig} to ${DST}."
+done
 
 # --------------------------------------------------------------------------
 # 2. Tables 1.8.0 has and the copy does not
@@ -230,19 +247,53 @@ echo "-- 4/4 columns whose type differs: ${MISMATCH_COUNT} (left untouched, list
     fi
 } > "$OUT_FILE"
 
-# Table structure AND the rows 1.8.0 expects to find there, straight from the
-# reference install. Streamed through the container so the dump never has to be
-# written to the host twice.
+# Table structure AND the reference vocabulary rows 1.8.0 expects (booking
+# statuses, sources, selling objects, property types, common amenity definitions
+# and so on), straight from the reference install.
+#
+# Tables whose rows in ${REF} hold ${REF}-specific foreign IDs - qctm_cron_task
+# (bound to qloapps_fresh's id_module numbers, which differ on live), demo
+# branch/room-type amenity assignments (saveDummyHotelAmenities /
+# saveDummyProductsAndRelatedInfo), and transactional/log tables - are dumped
+# structure-only (--no-data) so foreign IDs from the reference install never
+# leak into live data.
 if [ "${#MISSING_TABLES[@]}" -gt 0 ]; then
+    SEED_TABLES=()
+    STRUCT_ONLY_TABLES=()
+    for tbl in "${MISSING_TABLES[@]}"; do
+        case "$tbl" in
+            *_qctm_cron_task|*_qctm_cron_task_log|\
+            *_htl_branch_amenity|*_htl_room_type_amenity|*_htl_connected_room|\
+            *_htl_booking_status_history|*_cart_rule_hotel|\
+            *_order_tax_detail|*_order_tax_exemption|\
+            *_ari_updates|*_qghc_api_log|*_qghc_ari_updates)
+                STRUCT_ONLY_TABLES+=("$tbl")
+                ;;
+            *)
+                SEED_TABLES+=("$tbl")
+                ;;
+        esac
+    done
+
     # --skip-extended-insert puts one INSERT per row instead of one huge
     # multi-row statement, so a single badly escaped value costs one row and
     # names itself in the error, rather than poisoning a whole table's data.
     # --hex-blob removes another class of escaping problem entirely.
-    "$ENG" exec -i qlo-db sh -c "
-        mariadb-dump -u'${ROOT_USER}' -p'${ROOT_PASS}' --single-transaction --skip-add-drop-table \
-            --skip-extended-insert --hex-blob --no-tablespaces \
-            --default-character-set='${CHARSET}' '${REF}' ${MISSING_TABLES[*]}
-    " >> "$OUT_FILE"
+    if [ "${#SEED_TABLES[@]}" -gt 0 ]; then
+        "$ENG" exec -i qlo-db sh -c "
+            mariadb-dump -u'${ROOT_USER}' -p'${ROOT_PASS}' --single-transaction --skip-add-drop-table \
+                --skip-extended-insert --hex-blob --no-tablespaces \
+                --default-character-set='${CHARSET}' '${REF}' ${SEED_TABLES[*]}
+        " >> "$OUT_FILE"
+    fi
+    if [ "${#STRUCT_ONLY_TABLES[@]}" -gt 0 ]; then
+        echo "-- structure-only tables (rows in ${REF} carry ${REF}-local IDs): ${STRUCT_ONLY_TABLES[*]}" >> "$OUT_FILE"
+        "$ENG" exec -i qlo-db sh -c "
+            mariadb-dump -u'${ROOT_USER}' -p'${ROOT_PASS}' --single-transaction --skip-add-drop-table \
+                --no-data --no-tablespaces \
+                --default-character-set='${CHARSET}' '${REF}' ${STRUCT_ONLY_TABLES[*]}
+        " >> "$OUT_FILE"
+    fi
 fi
 
 if [ "$ALTER_COUNT" -gt 0 ]; then

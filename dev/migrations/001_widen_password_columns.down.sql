@@ -7,16 +7,20 @@
 --     FROM qlo_employee WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32
 --   UNION ALL
 --   SELECT 'customer', COUNT(*)
---     FROM qlo_customer  WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32;
+--     FROM qlo_customer WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32
+--   UNION ALL
+--   SELECT 'referrer', COUNT(*)
+--     FROM qlo_referrer WHERE passwd LIKE '$2y$%' OR CHAR_LENGTH(passwd) > 32;
 --
--- If either count is non-zero, STOP. Narrowing would truncate those hashes and
+-- If any count is non-zero, STOP. Narrowing would truncate those hashes and
 -- permanently lock the affected accounts out, exactly the failure migration
 -- 001 exists to prevent.
 --
 -- The ALTER statements are left COMMENTED OUT on purpose so that running this
--- file can never destroy passwords by accident. Uncomment both only after the
--- guard above returned zeros, and only if you genuinely need the legacy width
--- back (for example to restore a pre-migration backup consistently).
+-- file can never destroy passwords by accident. Uncomment all three only after
+-- the guard above returned zeros, and only if you genuinely need the legacy
+-- width back (for example to restore a pre-migration backup consistently).
 
 -- ALTER TABLE `qlo_employee` MODIFY `passwd` varchar(32) NOT NULL;
 -- ALTER TABLE `qlo_customer` MODIFY `passwd` varchar(32) NOT NULL;
+-- ALTER TABLE `qlo_referrer` MODIFY `passwd` varchar(32) DEFAULT NULL;

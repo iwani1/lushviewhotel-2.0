@@ -131,8 +131,9 @@ $ENGINE exec -i "$DB_CONTAINER" mariadb -uroot -p"$ROOT_PW" -N -B "$TARGET_DB" -
     SELECT CONCAT('    ', TABLE_NAME, '.passwd is now varchar(', CHARACTER_MAXIMUM_LENGTH, ')')
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA='${TARGET_DB}'
-      AND TABLE_NAME IN ('qlo_employee','qlo_customer')
-      AND COLUMN_NAME='passwd';"
+      AND TABLE_NAME IN ('qlo_employee','qlo_customer','qlo_referrer')
+      AND COLUMN_NAME='passwd'
+    ORDER BY TABLE_NAME;"
 echo
 
 echo "=== Done ==="

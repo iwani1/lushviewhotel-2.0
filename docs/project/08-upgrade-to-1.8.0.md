@@ -89,12 +89,26 @@ error, one bad line silently discarded every `ALTER TABLE` after it. The apply
 now runs with `--force` and reports both counts, so an incomplete schema can
 never pass unnoticed again.
 
+## Resolved follow-ups (2026-11-08)
+
+- **All 3 reported type differences are now closed (0 remaining):**
+  - `qlo_referrer.passwd` (`varchar(32)` → `varchar(60) DEFAULT NULL`, 0 live
+    rows) folded into `dev/migrations/001_widen_password_columns.up.sql`.
+  - `qlo_order_payment.amount` and `qlo_order_payment_detail.amount`
+    (`decimal(10,2)` → `decimal(20,6) NOT NULL`, 2,058 live rows each) widened
+    losslessly in `dev/migrations/003_widen_payment_amounts.up.sql` after owner
+    approval, eliminating the audit-row A27 precision mismatch.
+  - `dev/scripts/upgrade-live-copy.sh` applies `001` and `003` to `qloapps_18`
+    (leaving `qloapps_live` untouched) before diffing, and dumps non-vocabulary
+    tables (`qlo_qctm_cron_task*`, demo amenity links, transactional logs)
+    structure-only (`--no-data`) so `qloapps_fresh` IDs never leak into live
+    data.
+
 ## Not handled yet (phase 2, only if a page needs it)
 
 - New **rows** in tables that both versions have — hooks, tabs, meta. A missing
   hook row makes a block not render; it does not crash the page.
 - Backfilling new tables that reference existing bookings.
-- The reported type differences.
 
 Each is fixed against a specific error, not speculatively.
 

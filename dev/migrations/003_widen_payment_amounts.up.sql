@@ -1,0 +1,34 @@
+-- Migration 003 - widen the two payment amount columns to 1.8.0 precision.
+--
+-- WHY
+--   The live 1.7.0 schema stores both payment tables at two decimal places
+--   (audit row A27):
+--     - qlo_order_payment.amount         decimal(10,2) NOT NULL  (2,058 rows)
+--     - qlo_order_payment_detail.amount  decimal(10,2) NOT NULL  (2,058 rows)
+--
+--   Meanwhile QloApps 1.8.0 declares both as decimal(20,6) NOT NULL
+--   (install-dev/data/db_structure.sql:1581, 1599), matching qlo_orders and
+--   qlo_order_detail, and classes/order/Order.php:1945-1948 rounds converted
+--   payment details to 6 decimal places when updating total_paid_real.
+--   (Note: qlo_order_slip.amount remains decimal(10,2) in 1.8.0 as well, at
+--   install-dev/data/db_structure.sql:1651, so it is deliberately untouched.)
+--
+-- SAFETY
+--   Widening decimal(10,2) -> decimal(20,6) expands BOTH sides of the decimal
+--   point:
+--     - integer digits    :  8 (max 99,999,999.99) -> 14
+--     - fractional digits :  2                     ->  6
+--   Every existing payment value (e.g. 350.00 -> 350.000000) is preserved
+--   identically with zero rounding and zero truncation.
+--
+--   Reversal is dev/migrations/003_widen_payment_amounts.down.sql; read and run
+--   its guard query before uncommenting anything.
+--
+-- APPLIES TO
+--   The upgraded 1.8.0 database copy (locally qloapps_18 via
+--   dev/scripts/upgrade-live-copy.sh; on production <cpaneluser>_qlo18 at
+--   runbook step 3.3b). qloapps_live stays untouched on its original 1.7.0
+--   column definitions.
+
+ALTER TABLE `qlo_order_payment` MODIFY `amount` decimal(20,6) NOT NULL;
+ALTER TABLE `qlo_order_payment_detail` MODIFY `amount` decimal(20,6) NOT NULL;
