@@ -1,0 +1,50 @@
+{*
+* NOTICE OF LICENSE
+*
+* This source file is subject to the Open Software License version 3.0
+* that is bundled with this package in the file LICENSE.md
+* It is also available through the world-wide-web at this URL:
+* https://opensource.org/license/osl-3-0-php
+* If you did not receive a copy of the license and are unable to
+* obtain it through the world-wide-web, please send an email
+* to support@qloapps.com so we can send you a copy immediately.
+*
+* DISCLAIMER
+*
+* Do not edit or add to this file if you wish to upgrade this module to a newer
+* versions in the future. If you wish to customize this module for your needs
+* please refer to https://store.webkul.com/customisation-guidelines for more information.
+*
+* @author Webkul IN
+* @copyright Since 2010 Webkul
+* @license https://opensource.org/license/osl-3-0-php Open Software License version 3.0
+*}
+
+{block name='header_hotel_block'}
+	<div class="header-desc-container">
+		<div class="header-desc-wrapper">
+			<div class="header-desc-primary">
+				<div class="container header-align-{$wkHeaderContentAlign|default:HotelHeaderImage::CONTENT_ALIGN_CENTER|intval}">
+					<div class="row">
+						<div class="col-md-offset-1 col-md-10 col-lg-offset-0 col-lg-12">
+							<div class="header-desc-inner-wrapper">
+								{if $QLO_HEADER_MEDIA_TYPE == $QLO_HEADER_MEDIA_TYPE_IMAGE}
+								{block name='header_hotel_title'}
+									<h1 class="header-hotel-name js-header-title"{if !isset($wkHeaderMediaTitle) || !$wkHeaderMediaTitle} style="display:none"{/if}>{if isset($wkHeaderMediaTitle) && $wkHeaderMediaTitle}{$wkHeaderMediaTitle|escape:'htmlall':'UTF-8'}{/if}</h1>
+								{/block}
+								{/if}
+								{block name='header_hotel_description'}
+									<p class="header-hotel-desc js-header-description"{if !isset($wkHeaderMediaDescription) || !$wkHeaderMediaDescription} style="display:none"{else} style="color:{$wkDescriptionColor|default:'#ffffff'|escape:'html':'UTF-8'};font-size:{$wkDescriptionFontSize|default:16|intval}px;font-weight:{$wkDescriptionFontWeight|default:'400'|escape:'html':'UTF-8'}"{/if}>{if isset($wkHeaderMediaDescription) && $wkHeaderMediaDescription}{$wkHeaderMediaDescription|escape:'html':'UTF-8'}{/if}</p>
+								{/block}
+								<hr class="heasder-desc-hr-second"/>
+							</div>
+						</div>
+					</div>
+					{block name='displayAfterHeaderHotelDesc'}
+						{hook h="displayAfterHeaderHotelDesc"}
+					{/block}
+				</div>
+			</div>
+		</div>
+	</div>
+{/block}

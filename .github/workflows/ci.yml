@@ -1,0 +1,264 @@
+name: CI
+
+# QloApps 1.8.0 baseline for lushviewhotel-2.0.
+#
+# Replaces .travis.yml, which pinned `dist: trusty` (Ubuntu 14.04, EOL 2019)
+# on a retired CI service and therefore never ran. See audit section 8.
+#
+# Two jobs:
+#   lint   - PHP syntax check across first-party code, matrixed over the
+#            PHP versions QloApps 1.8.0 supports (>=8.2 <8.6).
+#   config - deterministic validation of composer.json and the localization
+#            packs, including the Ghana pack added for this project. Needs no
+#            PHP runtime, so it also guards edits made from a plain checkout.
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+
+      - name: PHP syntax check
+        # tools/ is excluded deliberately: it holds vendored upstream libraries
+        # (smarty, tcpdf, htmlpurifier, defuse, geoip, random_compat, ...) that
+        # are not maintained in this repository. Drop it from the exclude list
+        # if you want that surface linted too.
+        run: |
+          set -u
+          dirs="Adapter Core admin-dev classes config controllers dev install-dev \
+                js localization mails modules override pdf tests themes webservice"
+          find $dirs -type f -name '*.php' -print0 2>/dev/null \
+            | xargs -0 -n 1 -P "$(nproc)" php -l > /tmp/lint-all.txt 2>&1 || true
+
+          grep -v 'No syntax errors detected' /tmp/lint-all.txt \
+            | grep -v '^[[:space:]]*$' > /tmp/lint-errors.txt || true
+
+          total=$(grep -c 'No syntax errors detected' /tmp/lint-all.txt || true)
+          echo "Files linted clean: ${total}"
+
+          if [ -s /tmp/lint-errors.txt ]; then
+            echo "::error::PHP syntax errors detected"
+            cat /tmp/lint-errors.txt
+            exit 1
+          fi
+          echo "No syntax errors."
+
+  config:
+    name: Manifest and localization packs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate composer.json
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open('composer.json'))
+          req = d.get('require', {})
+          print('name      :', d.get('name'))
+          print('php       :', req.get('php'))
+
+          errs = []
+          # ext-mcrypt was removed from PHP core in 7.2 and is absent from every
+          # PHP version this release supports, so requiring it breaks
+          # `composer install` outright. Guard against it coming back.
+          if 'ext-mcrypt' in req:
+              errs.append('ext-mcrypt must not be required (removed from PHP core in 7.2)')
+          if not req.get('php'):
+              errs.append('php constraint missing')
+
+          for e in errs:
+              print('::error::' + e)
+          sys.exit(1 if errs else 0)
+          PY
+
+      - name: Validate localization packs
+        # Enforces the classes/LocalizationPack.php contract for every shipped
+        # pack, so a malformed country pack fails here rather than at import
+        # time in the back office.
+        #
+        # Every rule below maps to a *silent* failure in the importer - a case
+        # where LocalizationPack.php hits `continue` and the pack imports
+        # "successfully" while quietly dropping data:
+        #
+        #   :233-235  unknown iso_code_country  -> tax rule skipped
+        #   :238-240  unresolved id_tax         -> tax rule skipped
+        #   :286      currency validateFields() -> whole import aborts
+        #
+        # Deliberately NOT enforced, because both are legal upstream:
+        #   - tax ids are pack-local. $assoc_taxes is declared inside the
+        #     per-pack `if (isset($xml->taxes->tax))` block, so the same id may
+        #     legitimately appear in many packs (fr.xml and at.xml both use 1).
+        #   - `behavior` is optional. The parser reads
+        #     $rule_attributes['behavior'] directly, which SimpleXML resolves to
+        #     null when absent; fr.xml has 145 taxRules and no behavior at all.
+        run: |
+          python3 - <<'PY'
+          import glob, re, sys, xml.etree.ElementTree as ET
+
+          errs, warns, packs = [], [], 0
+          CURRENCY_REQ = ['name','iso_code','iso_code_num','sign','blank','format','decimals']
+
+          # Pre-existing upstream defects, baselined so this job is green on
+          # arrival while still failing on anything NEW. Each entry is
+          # (file, message substring). Do not add to this list to make a
+          # failure go away - fix the pack, or record why it cannot be fixed.
+          #
+          # cz.xml: the "CZ Snížená sazba (12%)" group points all 29 of its
+          # taxRule entries at id_tax="32", but the pack only declares ids
+          # 1-30. Tax id 2 is "DPH CZ 12%" - the only 12% Czech rate - so 32
+          # looks like a renumbering slip. LocalizationPack.php:238-240 hits
+          # `continue` on the unresolved reference, so the group imports
+          # completely empty and Czech merchants selecting the reduced rate get
+          # no tax applied.
+          #
+          # hr.xml / se.xml: 8 rules target iso_code_country="uk", but
+          # install-dev/data/xml/country.xml seeds the United Kingdom as "GB"
+          # (ISO 3166-1 alpha-2). Country::getByIso('UK') returns 0, so
+          # LocalizationPack.php:234-235 drops those rules silently. No other
+          # pack uses "uk", which points to these two being missed when the
+          # seed data moved to GB.
+          #
+          # Both are upstream bugs, out of scope for this project and not
+          # affecting Ghana. Recorded in
+          # docs/audit/lush-view-hotel-audit.md section 6.4.
+          KNOWN_UPSTREAM = [
+              ('localization/cz.xml', "undefined id_tax='32'"),
+              ('localization/hr.xml', "unknown country 'uk'"),
+              ('localization/se.xml', "unknown country 'uk'"),
+          ]
+
+          # Countries the importer can resolve, from the install seed data.
+          countries = set()
+          try:
+              seed = open('install-dev/data/xml/country.xml').read()
+              countries = {m.lower() for m in re.findall(r'iso_code="([A-Z]{2})"', seed)}
+          except OSError as e:
+              errs.append(f'cannot read country seed data: {e}')
+
+          def report(path, msg):
+              """Route a finding to warnings if it is a baselined upstream
+              defect, otherwise to hard errors."""
+              for base_path, frag in KNOWN_UPSTREAM:
+                  if path == base_path and frag in msg:
+                      warns.append(f'{path}: {msg}')
+                      return
+              errs.append(f'{path}: {msg}')
+
+          for path in sorted(glob.glob('localization/*.xml')):
+              packs += 1
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError as e:
+                  errs.append(f'{path}: not well-formed XML: {e}')
+                  continue
+
+              if root.tag != 'localizationPack':
+                  report(path, f'root element is {root.tag!r}, expected localizationPack')
+
+              taxes = root.findall('.//taxes/tax')
+              tax_ids = [t.get('id') for t in taxes]
+              # Ids must be unique *within* a pack, else $assoc_taxes collides
+              # and a taxRule binds to the wrong tax.
+              for dup in sorted({i for i in tax_ids if tax_ids.count(i) > 1}):
+                  report(path, f'duplicate tax id {dup} within pack')
+
+              for g in root.findall('.//taxes/taxRulesGroup'):
+                  for rule in g.findall('taxRule'):
+                      ref = rule.get('id_tax')
+                      if ref is None or ref not in tax_ids:
+                          report(path, f'group {g.get("name")!r} references '
+                                       f'undefined id_tax={ref!r} (rule would be '
+                                       f'silently dropped)')
+                      iso = rule.get('iso_code_country')
+                      if iso is not None and countries and iso.lower() not in countries:
+                          report(path, f'group {g.get("name")!r} targets unknown '
+                                       f'country {iso!r} (rule would be silently dropped)')
+                      beh = rule.get('behavior')
+                      if beh is not None and beh not in ('0','1','2'):
+                          report(path, f'group {g.get("name")!r} has invalid '
+                                       f'behavior={beh!r} (expected 0, 1 or 2)')
+
+              for c in root.findall('.//currencies/currency'):
+                  missing = [a for a in CURRENCY_REQ if c.get(a) is None]
+                  if missing:
+                      report(path, f'currency missing {missing}')
+                  elif len(c.get('iso_code')) != 3 or len(c.get('iso_code_num')) != 3:
+                      report(path, 'currency iso codes must be 3 chars')
+                  else:
+                      # Presence is not enough: the importer casts and then
+                      # runs ObjectModel::validateFields(), which THROWS
+                      # (ObjectModel.php:923) rather than skipping, taking the
+                      # whole install down with an HTTP 500. Mirror the field
+                      # definitions in classes/Currency.php:73-76 exactly.
+                      #
+                      # decimals and blank are TYPE_BOOL / Validate::isBool,
+                      # i.e. /^(0|1)$/. decimals means "show fractional digits
+                      # at all", NOT the number of them - a pack author writing
+                      # decimals="2" for a two-decimal currency produces an
+                      # unimportable pack. This exact defect shipped in gh.xml
+                      # and aborted a real install at configureShop.
+                      if not re.fullmatch(r'[01]', c.get('decimals')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'decimals={c.get("decimals")!r}; it is a '
+                                       f'boolean (0 or 1), not a digit count '
+                                       f'(Currency.php:75, Validate::isBool)')
+                      if not re.fullmatch(r'[01]', c.get('blank')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'blank={c.get("blank")!r}; expected 0 or 1')
+                      if not re.fullmatch(r'\d+', c.get('format')):
+                          report(path, f'currency {c.get("iso_code")!r} has '
+                                       f'format={c.get("format")!r}; expected an '
+                                       f'unsigned int (Validate::isUnsignedId)')
+                      if not c.get('sign') or len(c.get('sign').encode('utf-8')) > 8:
+                          report(path, f'currency {c.get("iso_code")!r} has a '
+                                       f'sign that is empty or over 8 bytes '
+                                       f'(Currency.php:73 size=8)')
+
+          print(f'Packs validated: {packs}')
+          print(f'Known countries: {len(countries)}')
+          for w in warns:
+              print('::warning::baselined upstream defect - ' + w)
+          for e in errs:
+              print('::error::' + e)
+          print(f'Errors: {len(errs)} | baselined warnings: {len(warns)}')
+          print('RESULT:', 'FAIL' if errs else 'PASS')
+          sys.exit(1 if errs else 0)
+          PY
+
+      - name: Confirm Ghana pack is present
+        run: |
+          test -f localization/gh.xml || { echo "::error::localization/gh.xml missing"; exit 1; }
+          grep -q 'iso_code="GHS"' localization/gh.xml || { echo "::error::GHS currency missing from gh.xml"; exit 1; }
+          echo "localization/gh.xml present with GHS."
