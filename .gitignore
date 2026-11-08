@@ -277,6 +277,7 @@ lushview-live-audit-*.json
 # everything else, leaving password columns at varchar(32).)
 !dev/migrations/*.sql
 !releases/lvh-db-upgrade-*.sql
+!modules/lvh*/sql/*.sql
 # Machine-generated migrations, and the error logs from applying them, are
 # derived from the production schema. They stay on the machine that produced
 # them; only the hand-written migrations above are committed.

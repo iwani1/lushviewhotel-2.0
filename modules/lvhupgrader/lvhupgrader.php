@@ -14,9 +14,9 @@
  *               theme rollback zip + token-protected emergency restore script.
  *   Step 2    : Downloads official `qloapps-1.8.0.zip` (release build with
  *               `vendor/` included) into an isolated staging directory, verifies
- *               `_QLO_VERSION_ === '1.8.0.0'` and `vendor/autoload.php`, applies
- *               the `search_form.tpl` XSS fix and `localization/gh.xml`, and
- *               strips `install/` + `settings.inc.php` from staging.
+ *               `_QLO_INSTALL_VERSION_ === '1.8.0.0'` and `vendor/autoload.php`,
+ *               applies the `search_form.tpl` XSS fix and `localization/gh.xml`,
+ *               and strips `install/` + `settings.inc.php` from staging.
  *   Step 3    : Applies the verified 385-statement idempotent MariaDB migration
  *               (widening `passwd` to `varchar(60)` and `order_payment` amounts
  *               to `decimal(20,6)`, creating all 27 new 1.8.0 Core/HRS tables in
@@ -51,7 +51,7 @@ class LvhUpgrader extends Module
     {
         $this->name = 'lvhupgrader';
         $this->tab = 'administration';
-        $this->version = '1.0.1';
+        $this->version = '1.0.2';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -529,6 +529,9 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST' && isset(\$_POST['confirm_restore']))
     \$zip->extractTo(\$rootDir);
     \$zip->close();
     @unlink(\$rootDir . '/cache/class_index.php');
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate(\$rootDir . '/config/settings.inc.php', true);
+    }
     if (function_exists('opcache_reset')) {
         @opcache_reset();
     }
@@ -624,15 +627,28 @@ PHP;
             throw new RuntimeException('Could not find config/defines.inc.php inside extracted qloapps-1.8.0.zip.');
         }
 
-        $definesContent = (string) @file_get_contents($stageRoot . '/config/defines.inc.php');
-        if (strpos($definesContent, "'1.8.0.0'") === false && strpos($definesContent, '"1.8.0.0"') === false) {
-            throw new RuntimeException('Extracted archive config/defines.inc.php does not declare _QLO_VERSION_ = 1.8.0.0.');
+        $installVerPath = is_file($stageRoot . '/install/install_version.php')
+            ? ($stageRoot . '/install/install_version.php')
+            : (is_file($stageRoot . '/install-dev/install_version.php') ? ($stageRoot . '/install-dev/install_version.php') : '');
+        $installVerContent = $installVerPath !== '' ? (string) @file_get_contents($installVerPath) : '';
+        $changelogContent = is_file($stageRoot . '/CHANGELOG.txt') ? (string) @file_get_contents($stageRoot . '/CHANGELOG.txt') : '';
+
+        $has180Version = (
+            strpos($installVerContent, "'1.8.0.0'") !== false ||
+            strpos($installVerContent, '"1.8.0.0"') !== false ||
+            stripos($changelogContent, 'V1.8.0') !== false
+        );
+        if (!$has180Version) {
+            throw new RuntimeException('Extracted archive does not declare _QLO_INSTALL_VERSION_ = 1.8.0.0 in install/install_version.php or CHANGELOG.txt.');
         }
         if (!is_file($stageRoot . '/vendor/autoload.php')) {
             throw new RuntimeException('Extracted archive is missing vendor/autoload.php (must use official release asset, not raw git source zip).');
         }
-        if (!is_file($stageRoot . '/classes/PasswordHashing.php')) {
-            throw new RuntimeException('Extracted archive is missing classes/PasswordHashing.php.');
+        if (
+            !is_file($stageRoot . '/classes/PasswordHashing.php') ||
+            !is_file($stageRoot . '/modules/hotelreservationsystem/classes/HotelHeaderImage.php')
+        ) {
+            throw new RuntimeException('Extracted archive is missing QloApps 1.8.0 signature classes (PasswordHashing.php / HotelHeaderImage.php).');
         }
 
         $stageAdminFolder = is_dir($stageRoot . '/admin') ? 'admin' : (is_dir($stageRoot . '/admin-dev') ? 'admin-dev' : '');
@@ -752,7 +768,8 @@ PHP;
         $p = _DB_PREFIX_;
         $empLen = (int) $db->getValue(
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" . pSQL($p . 'employee') . "' AND COLUMN_NAME = 'passwd'"
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" . pSQL($p . 'employee') . "' AND COLUMN_NAME = 'passwd'",
+            false
         );
         if ($empLen < 60) {
             throw new RuntimeException('Verification failed: ' . $p . 'employee.passwd length is ' . $empLen . ' (expected >= 60).');
@@ -766,7 +783,8 @@ PHP;
         foreach ($requiredTables as $rt) {
             $exists = (int) $db->getValue(
                 "SELECT COUNT(*) FROM information_schema.TABLES
-                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" . pSQL($p . $rt) . "'"
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" . pSQL($p . $rt) . "'",
+                false
             );
             if (!$exists) {
                 throw new RuntimeException('Verification failed: table `' . $p . $rt . '` was not created.');
@@ -774,9 +792,10 @@ PHP;
         }
 
         $totalTables = (int) $db->getValue(
-            "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'"
+            "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'",
+            false
         );
-        $amenitiesCount = (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_amenity') . '`');
+        $amenitiesCount = (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_amenity') . '`', false);
 
         return array(
             'ok' => true,
@@ -1001,7 +1020,11 @@ PHP;
             }
         }
 
-        // 4. Purge autoloader class_index.php, Smarty compiled templates, ad caches & staging tree
+        // 4. Safely bump _QLOAPPS_VERSION_ inside live config/settings.inc.php while keeping
+        //    _COOKIE_KEY_, _DB_PASSWD_, and all encryption/database constants 100% untouched.
+        $this->bumpSettingsQloVersionNative($rootDir . '/config/settings.inc.php', '1.8.0.0');
+
+        // 5. Purge autoloader class_index.php, Smarty compiled templates, ad caches & staging tree
         @unlink($rootDir . '/cache/class_index.php');
         @unlink($rootDir . '/cache/dashboard_recommendation.html');
         @unlink($rootDir . '/cache/catalog_recommendation.html');
@@ -1023,12 +1046,58 @@ PHP;
             'files_updated' => $copiedFiles,
             'stale_files_pruned' => $prunedFiles,
             'message' => sprintf(
-                'QloApps 1.8.0.0 core, theme, vendor & module files activated (%d files updated, %d obsolete 1.7.0 files pruned) and caches cleared.',
+                'QloApps 1.8.0.0 core, theme, vendor & module files activated (%d files updated, %d obsolete 1.7.0 files pruned, _QLOAPPS_VERSION_ = 1.8.0.0) and caches cleared.',
                 $copiedFiles,
                 $prunedFiles
             ),
         ));
         exit;
+    }
+
+    /**
+     * Atomically update `_QLOAPPS_VERSION_` inside `config/settings.inc.php` using pure
+     * native PHP, preserving `_COOKIE_KEY_`, `_DB_PASSWD_`, and all other constants untouched.
+     *
+     * @param string $settingsPath
+     * @param string $targetVersion
+     * @return bool
+     */
+    protected function bumpSettingsQloVersionNative($settingsPath, $targetVersion)
+    {
+        if (!is_file($settingsPath) || !is_readable($settingsPath) || !is_writable($settingsPath)) {
+            return false;
+        }
+        $raw = (string) @file_get_contents($settingsPath);
+        if ($raw === '') {
+            return false;
+        }
+        $pattern = '/(define\s*\(\s*[\'"]_QLOAPPS_VERSION_[\'"]\s*,\s*[\'"])([^\'"]*)([\'"]\s*\)\s*;)/';
+        if (preg_match($pattern, $raw)) {
+            $updated = preg_replace($pattern, '${1}' . $targetVersion . '${3}', $raw, 1);
+        } else {
+            $addition = "\nif (!defined('_QLOAPPS_VERSION_')) {\n    define('_QLOAPPS_VERSION_', '" . $targetVersion . "');\n}\n";
+            if (preg_match('/\?>\s*$/', $raw)) {
+                $updated = preg_replace('/\?>\s*$/', $addition . "?>\n", $raw, 1);
+            } else {
+                $updated = rtrim($raw) . $addition;
+            }
+        }
+        if (!is_string($updated) || $updated === '' || strpos($updated, '_COOKIE_KEY_') === false || strpos($updated, '_DB_NAME_') === false) {
+            return false;
+        }
+        $tmpPath = $settingsPath . '.lvh_tmp';
+        if (@file_put_contents($tmpPath, $updated) !== false && filesize($tmpPath) > 100) {
+            if (!@rename($tmpPath, $settingsPath)) {
+                @copy($tmpPath, $settingsPath);
+                @unlink($tmpPath);
+            }
+            if (function_exists('opcache_invalidate')) {
+                @opcache_invalidate($settingsPath, true);
+            }
+            return true;
+        }
+        @unlink($tmpPath);
+        return false;
     }
 
     protected function copyModulesNative($stageModulesDir, $liveModulesDir)
@@ -1168,7 +1237,7 @@ PHP;
 
         // 1. Sync / run upgrade scripts on installed bundled modules
         $upgradedModules = 0;
-        $installedRows = $db->executeS('SELECT `name`, `version` FROM `' . bqSQL($p . 'module') . '` WHERE `active` = 1');
+        $installedRows = $db->executeS('SELECT `name`, `version` FROM `' . bqSQL($p . 'module') . '` WHERE `active` = 1', true, false);
         if (is_array($installedRows)) {
             foreach ($installedRows as $mRow) {
                 $mName = (string) $mRow['name'];
@@ -1199,8 +1268,24 @@ PHP;
             }
         }
 
+        // 1b. Copy any custom 1.7.0 feature icons (`views/img/hotel_features/*.jpg`) into 1.8.0 `hotel_amenities/`
+        $oldFeatImgDir = _PS_MODULE_DIR_ . 'hotelreservationsystem/views/img/hotel_features/';
+        $newAmenImgDir = _PS_MODULE_DIR_ . 'hotelreservationsystem/views/img/hotel_amenities/';
+        if (is_dir($oldFeatImgDir) && is_dir($newAmenImgDir)) {
+            foreach (scandir($oldFeatImgDir) as $fEntry) {
+                if ($fEntry === '.' || $fEntry === '..' || $fEntry === 'index.php') {
+                    continue;
+                }
+                $srcF = $oldFeatImgDir . $fEntry;
+                $dstF = $newAmenImgDir . $fEntry;
+                if (is_file($srcF) && !is_file($dstF)) {
+                    @copy($srcF, $dstF);
+                }
+            }
+        }
+
         // 2. Migrate 1.7.0 homepage hero image (`WK_HOTEL_HEADER_IMAGE`) into 1.8.0 `htl_header_image` if empty
-        $headerRows = (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_header_image') . '`');
+        $headerRows = (int) $db->getValue('SELECT COUNT(*) FROM `' . bqSQL($p . 'htl_header_image') . '`', false);
         if ($headerRows === 0) {
             $mediaDir = _PS_IMG_DIR_ . 'hotel_header_media/';
             if (!is_dir($mediaDir)) {
@@ -1288,7 +1373,9 @@ PHP;
         $coreZip = $backupDir . '/core-files-1.7.0.zip';
         $stageReady = is_file($stageBase . '/stage_ready.json');
 
-        $qloCodeVer = defined('_QLO_VERSION_') ? _QLO_VERSION_ : _PS_VERSION_;
+        $qloCodeVer = defined('_QLOAPPS_VERSION_')
+            ? _QLOAPPS_VERSION_
+            : (defined('_QLO_VERSION_') ? _QLO_VERSION_ : _PS_VERSION_);
         $qloDbVer = (string) $db->getValue("SELECT `value` FROM `" . bqSQL($p . 'configuration') . "` WHERE `name` = 'QLO_VERSION_DB'", false);
 
         return array(
@@ -1466,7 +1553,7 @@ PHP;
                             </span>
                         </div>
                         <div class="lvh-step-desc">
-                            Downloads official <code>qloapps-1.8.0.zip</code> (46.5 MB with pre-built <code>vendor/</code>), verifies <code>_QLO_VERSION_ = 1.8.0.0</code>, applies the <code>search_form.tpl</code> XSS fix + Ghana Cedi pack, and strips <code>install/</code> before touching live files.
+                            Downloads official <code>qloapps-1.8.0.zip</code> (46.5 MB with pre-built <code>vendor/</code>), verifies <code>_QLO_INSTALL_VERSION_ = 1.8.0.0</code>, applies the <code>search_form.tpl</code> XSS fix + Ghana Cedi pack, and strips <code>install/</code> before touching live files.
                         </div>
                     </div>
                     <div>

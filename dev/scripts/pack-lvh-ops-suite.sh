@@ -26,6 +26,10 @@ for mod in modules:
     src_dir = os.path.join(repo_root, 'modules', mod)
     if not os.path.isdir(src_dir):
         raise SystemExit(f"error: {src_dir} does not exist")
+    if mod == 'lvhupgrader':
+        sql_path = os.path.join(src_dir, 'sql', 'upgrade_170_to_180.sql')
+        if not os.path.isfile(sql_path) or os.path.getsize(sql_path) < 50000:
+            raise SystemExit(f"error: {sql_path} missing or truncated")
     out_zip = os.path.join(out_dir, f"{mod}.zip")
     with zipfile.ZipFile(out_zip, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for dp, dns, fns in os.walk(src_dir):
