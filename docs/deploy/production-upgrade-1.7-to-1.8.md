@@ -17,6 +17,20 @@ individual step, and the two rules that keep this reversible are:
 With both rules honoured, a failed upgrade costs a rename and a config edit, not
 a restore from backup.
 
+> **Turnkey Upgrade Kit (`releases/`):**
+> For direct cPanel + phpMyAdmin execution without needing a local Docker/Podman
+> setup, two self-contained artifacts are pre-built and verified in `releases/`:
+> 1. **`releases/lvh-db-upgrade-1.7.0-to-1.8.0.sql`** — single idempotent MariaDB
+>    migration combining `001` (bcrypt `varchar(60)` passwords), `003` (`decimal(20,6)`
+>    payments), all `27` new 1.8.0 Core/HRS tables (`utf8mb3_general_ci`), all `23`
+>    new columns, canonical 1.8.0 vocabulary/tabs/hooks, `htl_features → htl_amenity`
+>    migration, orphan `cashpayment` cleanup, and 52 US state tax deactivation.
+> 2. **`releases/lvh-1.8.0-overlay.zip`** — clean overlay archive to extract onto
+>    official QloApps `v1.8.0` containing the `search_form.tpl` XSS fix,
+>    `localization/gh.xml`, `lvhadminclean` (`v2.0.1`), and all 6 LVH operational
+>    modules (`lvhauditlog`, `lvhpayments`, `lvhhousekeeping`, `lvhfrontdesk`,
+>    `lvhconference`, `lvhreports`).
+
 ---
 
 ## 0. Where this plan comes from
