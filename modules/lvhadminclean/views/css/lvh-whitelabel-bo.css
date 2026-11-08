@@ -23,12 +23,15 @@
     margin: 0 !important;
 }
 
-/* Style Top-Left Hotel Brand Badge (#header_shopname) */
+/* Style Top-Left Hotel Brand Badge (#header_shopname) — strictly 36px to match .page-head { top: 36px } */
 .bootstrap #header_infos #header_shopname {
     font-weight: 700 !important;
     font-size: 16px !important;
     letter-spacing: 0.3px;
-    padding: 8px 14px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    padding: 0 14px !important;
+    margin: 0 !important;
     display: inline-flex !important;
     align-items: center;
     gap: 8px;
@@ -66,13 +69,33 @@ li:has(> a[id^="page-header-desc-"][id$="-modules-list"]),
 }
 
 /* 5. Hide Dashboard "QLOAPPS UPDATE" & "HELP CENTER" Right-Column Panels */
-body.admindashboard .dash_links,
+#dashboard .dash_links:has(a[href*="qloapps.com"]),
+#dashboard #hookDashboardZoneThree .dash_version,
+#dashboard #dash_version,
 body.admindashboard #hookDashboardZoneThree .dash_version,
 body.admindashboard #dash_version,
 #block_upgrade,
 a[href*="qloapps.com/addons"],
 a[href*="store.webkul.com"] {
     display: none !important;
+}
+
+/* Keep Bootstrap 3 push/pull columns perfectly aligned when #hookDashboardZoneThree is empty:
+   - #hookDashboardZoneTwo: col-lg-push-3 (left: 25%) + col-lg-9 (width: 75%) => 25%..100%
+   - #hookDashboardZoneOne: col-lg-3 (width: 25%, starts at 75%) + col-lg-pull-9 (right: 75%) => 0%..25% */
+#dashboard.lvh-zone3-empty #hookDashboardZoneThree {
+    display: none !important;
+}
+
+@media (min-width: 1200px) {
+    #dashboard.lvh-zone3-empty #hookDashboardZoneTwo {
+        width: 75% !important;
+        left: 25% !important;
+    }
+    #dashboard.lvh-zone3-empty #hookDashboardZoneOne {
+        width: 25% !important;
+        right: 75% !important;
+    }
 }
 
 /* Hide Module List Addons Marketplace Upsell Badges */

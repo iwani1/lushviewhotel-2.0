@@ -210,7 +210,7 @@
             }
         }
 
-        // Dashboard right column: hide QLOAPPS UPDATE + HELP CENTER & widen main stats area
+        // Dashboard right column: hide QLOAPPS UPDATE + HELP CENTER & widen main stats area cleanly
         if (cfg.hideHelpAndUpdate) {
             var zoneThree = document.getElementById('hookDashboardZoneThree');
             if (zoneThree) {
@@ -219,8 +219,9 @@
                 for (var p = 0; p < panels.length; p++) {
                     var pnl = panels[p];
                     var txt = (pnl.textContent || '').toLowerCase();
+                    var hasVendorLink = !!pnl.querySelector('a[href*="qloapps.com"], a[href*="webkul.com"]');
                     if (
-                        pnl.classList.contains('dash_links') ||
+                        hasVendorLink ||
                         txt.indexOf('qloapps update') !== -1 ||
                         txt.indexOf('latest version available') !== -1 ||
                         txt.indexOf('help center') !== -1 ||
@@ -236,12 +237,46 @@
                         visibleCount++;
                     }
                 }
+                var dashRoot = document.getElementById('dashboard');
+                var zoneTwo = document.getElementById('hookDashboardZoneTwo');
+                var zoneOne = document.getElementById('hookDashboardZoneOne');
                 if (visibleCount === 0) {
                     zoneThree.style.display = 'none';
-                    var zoneTwo = document.getElementById('hookDashboardZoneTwo');
-                    if (zoneTwo) {
+                    if (dashRoot) {
+                        dashRoot.classList.add('lvh-zone3-empty');
+                    }
+                    // Bootstrap 3 push/pull math:
+                    // ZoneTwo is FIRST in DOM with col-lg-push-3; widening col-lg-7 -> col-lg-9
+                    // requires ZoneOne (SECOND in DOM) to update col-lg-pull-7 -> col-lg-pull-9
+                    // so ZoneOne pulls all the way back to column 0 instead of overlapping ZoneTwo.
+                    var changedGrid = false;
+                    if (zoneTwo && !zoneTwo.classList.contains('col-lg-9')) {
                         zoneTwo.classList.remove('col-lg-7');
                         zoneTwo.classList.add('col-lg-9');
+                        changedGrid = true;
+                    }
+                    if (zoneOne && !zoneOne.classList.contains('col-lg-pull-9')) {
+                        zoneOne.classList.remove('col-lg-pull-7');
+                        zoneOne.classList.add('col-lg-pull-9');
+                        changedGrid = true;
+                    }
+                    if (changedGrid) {
+                        try {
+                            window.dispatchEvent(new Event('resize'));
+                        } catch (e) { /* ignore */ }
+                    }
+                } else {
+                    zoneThree.style.display = '';
+                    if (dashRoot) {
+                        dashRoot.classList.remove('lvh-zone3-empty');
+                    }
+                    if (zoneTwo && zoneTwo.classList.contains('col-lg-9')) {
+                        zoneTwo.classList.remove('col-lg-9');
+                        zoneTwo.classList.add('col-lg-7');
+                    }
+                    if (zoneOne && zoneOne.classList.contains('col-lg-pull-9')) {
+                        zoneOne.classList.remove('col-lg-pull-9');
+                        zoneOne.classList.add('col-lg-pull-7');
                     }
                 }
             }

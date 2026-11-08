@@ -55,7 +55,7 @@ class LvhAdminClean extends Module
     {
         $this->name = 'lvhadminclean';
         $this->tab = 'administration';
-        $this->version = '2.0.0';
+        $this->version = '2.0.1';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
