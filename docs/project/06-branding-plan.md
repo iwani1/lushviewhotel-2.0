@@ -81,8 +81,8 @@ database-driven. The only guest-reachable literals are rows 12–14.
   separate site, not this codebase) shows `Nii Okoi Olaaye, Tema C22, Ghana`,
   `030 298 5459`, `info@lushviewhotel.com`, `lushview6@gmail.com`; Google and
   Facebook list `H71 Afariwa Rd, Tema, Ghana` and `+233 30 298 5459`. The owner
-  has now resolved the address (see §3); the email and the fate of `.com` are
-  still open.
+  has now resolved the address and the contact email (see §3); what remains open
+  is only whether `lushviewhotel.com` stays live, redirects, or is retired.
 
 ---
 
@@ -93,7 +93,7 @@ database-driven. The only guest-reachable literals are rows 12–14.
 | Canonical hotel name | `Lush View Hotel` | Website name (row 8) | **confirmed** — also fixes F1, F2, F3, F4 |
 | Address | `H71 Afariwa Rd, Tema, Ghana` | Address line 1 (row 8) and the branch record (row 9) | **confirmed** |
 | Phone | `+233 30 298 5459` (local form `030 298 5459`) | Phone (row 8) | confirmed by the address choice; verify it is the number to publish |
-| Contact / From email | `info@lushviewhotel.net`? | Website email (row 8) | **OPEN — owner typed `ino@lushviewhotel.net`**, which reads as a typo for `info@`. Must be confirmed *and* the mailbox must really exist on the `.net` domain, otherwise booking confirmations go out from an address that bounces |
+| Contact / From email | `info@lushviewhotel.net` | Website email (row 8) | **confirmed by the owner, 2026-11-07** (an earlier message had it as `ino@…`, now corrected). This single field sets both the From address (`Mail.php:159-160`) and the Reply-To (`Mail.php:346,350`) on every outgoing mail, so the mailbox must exist and be read |
 | Establishment year | `2010` (current live value) | Website Launch Year (row 8) | keep unless wrong |
 | Footer attribution | remove "Powered by QloApps" | theme override, D6 | **confirmed — shipped** |
 
@@ -162,10 +162,18 @@ database, entered once on the row 8 page, so it can change without a deploy.
 - **B1b — done (owner-approved, D6).** Footer attribution override.
 - **B2 — owner, ~10 min, back office, local install first.** Hotel General
   Configuration → Website Contact Details: Website name `Lush View Hotel`,
-  Website email (once §3 is confirmed), Phone `+233 30 298 5459`, Address line 1
-  `H71 Afariwa Rd`, city/country Tema, Ghana. Then Preferences → Themes: logo,
-  mobile logo, mail logo, favicon. Verify: browser tab title, header logo `alt`,
-  footer copyright and a test email's From name all read `Lush View Hotel`.
+  Website email `info@lushviewhotel.net`, Phone `+233 30 298 5459`, Address
+  line 1 `H71 Afariwa Rd`, city Tema, country Ghana. Then Preferences → Themes:
+  logo, mobile logo, mail logo, favicon. Verify: browser tab title, header logo
+  `alt`, footer copyright and a test email's From name all read `Lush View
+  Hotel`, and the From address is `info@lushviewhotel.net`.
+
+  **On a local or development install, set Advanced Parameters → E-mail → "Never
+  send emails" first** (`PS_MAIL_METHOD` = 3). Otherwise a test booking on a
+  copy of live data can mail a real guest from your laptop. Before go-live, also
+  check that `lushviewhotel.net` mail is sent from a server whose SPF record
+  covers it, or the confirmations will land in spam; the same page has a
+  "send a test email" function — send it to yourself only.
 - **B3 — owner, ~30 min, back office.** Kill the demo content: interior gallery
   display names (`Dummy Image N`) and the `Explore the Interiors!` heading in
   About Hotel Block; the amenities blurb and the three duplicated
@@ -204,9 +212,10 @@ live site. Nothing in this plan touches production.
       `theme-color` present, generator meta still QloApps (D1, expected).
 - [ ] Zero hits for `Dummy Image`, `Hotel Prime`, `Explore the Interiors` and
       `QloApps` (except D1 rows) in rendered guest pages.
-- [ ] Test booking-confirmation email From name = Lush View Hotel (send to
-      yourself only; locally use the "Never send emails" or log-only method,
-      never real SMTP against live data).
+- [ ] Test booking-confirmation email From name = `Lush View Hotel` and From
+      address = `info@lushviewhotel.net` (send to yourself only; locally set
+      Advanced Parameters → E-mail to "Never send emails" first, and never use
+      real SMTP against a copy of live data).
 - [ ] Invoice PDF header = Lush View Hotel + new logo.
 - [ ] Social icons render in the footer.
 - [ ] `git status` shows no core edits: every changed file lives under
