@@ -256,6 +256,9 @@ admin/themes/default/css/screen.css
 
 **sitemap.xml
 robots.txt
+# Generated installable module archives (built via dev/scripts/pack-lvhaudit.sh)
+/releases/
+
 # Database dumps and data exports - never commit production data
 *.sql
 !install-dev/data/*.sql
