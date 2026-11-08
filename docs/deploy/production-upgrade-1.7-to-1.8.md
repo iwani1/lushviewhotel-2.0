@@ -33,9 +33,13 @@ already proven on your own live data**:
 - `dev/scripts/upgrade-live-copy.sh` diffed the working 1.8.0 install
   (`qloapps_fresh`) against a copy of the production database (`qloapps_live`)
   and produced `dev/migrations/generated/002_qloapps_live_to_1_8_0.sql`.
-- Applied to `qloapps_18`: 300 tables copied, **32 tables created**, **31
-  columns added**, 0 apply errors, 0 tables and 0 columns still missing against
-  a real 1.8.0 install.
+- Applied to `qloapps_18`: 300 tables copied, **27 core/HRS tables created** and
+  **23 core/HRS columns added** (leaving the **5 tables and 8 columns** owned by
+  uninstalled 1.8.0 modules — `qlocmconnector`, `qlogooglehotelconnector`,
+  `qlocrontaskmanager` — for each module's own `install()` in step 6.1, so
+  unguarded `ALTER TABLE … ADD COLUMN` statements do not fail with `1060
+  Duplicate column name`), 0 apply errors, 0 core/HRS tables or columns still
+  missing, and 0 column type differences.
 - The owner then verified the back office end to end on that database:
   dashboard, bookings, customers, room types and stats all work.
 
@@ -96,10 +100,14 @@ Nothing here changes anything. Every query runs against the **local copy**.
         longer exists on disk — leaving dead rows in `qlo_module`,
         `qlo_module_shop` and `qlo_hook_module` (and a broken sidebar tab until
         `qlocmconnector` is installed in 6.1).
-      - `qlocrontaskmanager` (`1.0.0`, new in 1.8.0) — `upgrade-live-copy.sh`
-        now dumps `qlo_qctm_cron_task` structure-only (`--no-data`) so
-        `qloapps_fresh`'s `id_module` numbers do not leak into the copy before
-        6.1 installs the module. Regenerate `002` locally before section 3.
+      - `qlocrontaskmanager`, `qlocmconnector`, `qlogooglehotelconnector` (all
+        new in 1.8.0) — **caught in rehearsal 2026-11-08:** `QcmcCMConnectorDb`
+        and `QghcDb` run unguarded `ALTER TABLE … ADD COLUMN` on `install()`,
+        which throws `SQLSTATE[42S21]: 1060 Duplicate column name` under PHP 8's
+        `PDO::ERRMODE_EXCEPTION` if `002` pre-adds their columns. `upgrade-live-copy.sh`
+        now defers all **5 tables and 8 columns** owned by those three
+        uninstalled modules so step 6.1 installs them cleanly against unmodified
+        upstream 1.8.0 code. Regenerate `002` locally before section 3.
 - [ ] **1.4 Find every non-standard file on the live server.** In cPanel File
       Manager, compare `public_html/modules/` and `public_html/override/`
       against this repository's `modules/` and `override/`. Anything on live that
@@ -180,7 +188,9 @@ Nothing here changes anything. Every query runs against the **local copy**.
              (SELECT COUNT(*) FROM information_schema.TABLES
                WHERE TABLE_SCHEMA=DATABASE())                AS tables_total;
       ```
-      Expected: 1,934 / 1,257 / 2,058 / 15 / **332**.
+      Expected: 1,934 / 1,257 / 2,058 / 15 / **327** (becomes **332** after
+      step 6.1 installs `qlocmconnector`, `qlocrontaskmanager` and
+      `qlogooglehotelconnector`).
 - [ ] **3.6 Check the character sets did not end up mixed.** The copy is
       utf8mb3; tables created from a fresh 1.8.0 install may not be:
       ```sql

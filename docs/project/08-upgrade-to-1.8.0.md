@@ -99,10 +99,13 @@ never pass unnoticed again.
     losslessly in `dev/migrations/003_widen_payment_amounts.up.sql` after owner
     approval, eliminating the audit-row A27 precision mismatch.
   - `dev/scripts/upgrade-live-copy.sh` applies `001` and `003` to `qloapps_18`
-    (leaving `qloapps_live` untouched) before diffing, and dumps non-vocabulary
-    tables (`qlo_qctm_cron_task*`, demo amenity links, transactional logs)
-    structure-only (`--no-data`) so `qloapps_fresh` IDs never leak into live
-    data.
+    (leaving `qloapps_live` untouched) before diffing, dumps non-vocabulary
+    tables (`qlo_htl_branch_amenity`, `qlo_htl_room_type_amenity`, transactional
+    logs) with `--no-data`, and **defers the 5 tables and 8 columns owned by
+    uninstalled 1.8.0 modules** (`qlocmconnector`, `qlogooglehotelconnector`,
+    `qlocrontaskmanager`) so their unguarded `ALTER TABLE … ADD COLUMN`
+    statements succeed cleanly on back-office install (`27` core/HRS tables +
+    `23` core/HRS columns in `002`).
 
 ## Not handled yet (phase 2, only if a page needs it)
 

@@ -140,18 +140,82 @@ do
 done
 
 # --------------------------------------------------------------------------
+# Defer tables and columns owned by UNINSTALLED 1.8.0 modules
+# --------------------------------------------------------------------------
+# Why this matters (caught 2026-11-08 while rehearsing step 6.1):
+# qloapps_fresh installs qlocmconnector, qlogooglehotelconnector and
+# qlocrontaskmanager during setup, whereas a 1.7.0 database has none of them in
+# qlo_module. Both QcmcCMConnectorDb::createTables() and QghcDb::createTables()
+# execute UNGUARDED `ALTER TABLE ... ADD COLUMN` statements on install(), and
+# PHP 8's PDO defaults to ERRMODE_EXCEPTION - so pre-adding their 8 columns
+# here makes clicking "Install" in the back office crash halfway through with
+# `SQLSTATE[42S21]: 1060 Duplicate column name`, leaving the module
+# half-installed in qlo_module (and pre-creating qctm_cron_task leaks
+# qloapps_fresh's id_module numbers). None of those 5 tables or 8 columns is
+# queried outside its owning module, so each uninstalled module must create its
+# own schema when installed.
+DB_PREFIX="$(sql -e "
+    SELECT LEFT(TABLE_NAME, CHAR_LENGTH(TABLE_NAME) - 6)
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA='${DST}' AND TABLE_NAME LIKE '%\\_module'
+    ORDER BY CHAR_LENGTH(TABLE_NAME) ASC LIMIT 1;")"
+DB_PREFIX="${DB_PREFIX:-qlo_}"
+
+mod_installed() {
+    [ "0" != "$(sql -e "SELECT COUNT(*) FROM \`${DST}\`.\`${DB_PREFIX}module\` WHERE name='$1';")" ]
+}
+
+EXCL_TABLES_LIST=()
+EXCL_COLS_LIST=()
+EXCL_TABLES_SQL="1=1"
+EXCL_COLS_SQL="1=1"
+
+if ! mod_installed "qlocmconnector"; then
+    EXCL_TABLES_LIST+=("${DB_PREFIX}ari_updates")
+    EXCL_COLS_LIST+=("${DB_PREFIX}orders.id_channel_manager_booking" "${DB_PREFIX}htl_booking_detail.rate_plan_name")
+    EXCL_TABLES_SQL="${EXCL_TABLES_SQL} AND t.TABLE_NAME <> '${DB_PREFIX}ari_updates'"
+    EXCL_COLS_SQL="${EXCL_COLS_SQL}
+      AND NOT (c.TABLE_NAME='${DB_PREFIX}orders' AND c.COLUMN_NAME='id_channel_manager_booking')
+      AND NOT (c.TABLE_NAME='${DB_PREFIX}htl_booking_detail' AND c.COLUMN_NAME='rate_plan_name')"
+fi
+
+if ! mod_installed "qlogooglehotelconnector"; then
+    EXCL_TABLES_LIST+=("${DB_PREFIX}qghc_api_log" "${DB_PREFIX}qghc_ari_updates")
+    EXCL_COLS_LIST+=(
+        "${DB_PREFIX}htl_branch_info.is_google_hotel_enabled"
+        "${DB_PREFIX}htl_branch_info.id_google_hotel"
+        "${DB_PREFIX}htl_branch_info.google_status"
+        "${DB_PREFIX}htl_branch_info.failure_reason"
+        "${DB_PREFIX}htl_room_type.is_google_hotel_enabled"
+        "${DB_PREFIX}htl_room_type.id_google_room_type"
+    )
+    EXCL_TABLES_SQL="${EXCL_TABLES_SQL} AND t.TABLE_NAME NOT IN ('${DB_PREFIX}qghc_api_log','${DB_PREFIX}qghc_ari_updates')"
+    EXCL_COLS_SQL="${EXCL_COLS_SQL}
+      AND NOT (c.TABLE_NAME='${DB_PREFIX}htl_branch_info'
+               AND c.COLUMN_NAME IN ('is_google_hotel_enabled','id_google_hotel','google_status','failure_reason'))
+      AND NOT (c.TABLE_NAME='${DB_PREFIX}htl_room_type'
+               AND c.COLUMN_NAME IN ('is_google_hotel_enabled','id_google_room_type'))"
+fi
+
+if ! mod_installed "qlocrontaskmanager"; then
+    EXCL_TABLES_LIST+=("${DB_PREFIX}qctm_cron_task" "${DB_PREFIX}qctm_cron_task_log")
+    EXCL_TABLES_SQL="${EXCL_TABLES_SQL} AND t.TABLE_NAME NOT IN ('${DB_PREFIX}qctm_cron_task','${DB_PREFIX}qctm_cron_task_log')"
+fi
+
+# --------------------------------------------------------------------------
 # 2. Tables 1.8.0 has and the copy does not
 # --------------------------------------------------------------------------
 mapfile -t MISSING_TABLES < <(sql -e "
     SELECT t.TABLE_NAME
     FROM information_schema.TABLES t
     WHERE t.TABLE_SCHEMA='${REF}' AND t.TABLE_TYPE='BASE TABLE'
+      AND (${EXCL_TABLES_SQL})
       AND NOT EXISTS (
           SELECT 1 FROM information_schema.TABLES x
           WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=t.TABLE_NAME)
     ORDER BY t.TABLE_NAME;")
 
-echo "-- 2/4 missing tables: ${#MISSING_TABLES[@]}"
+echo "-- 2/4 missing core/installed-module tables: ${#MISSING_TABLES[@]} (deferred to uninstalled 1.8.0 modules: ${#EXCL_TABLES_LIST[@]})"
 
 # --------------------------------------------------------------------------
 # 3. Columns 1.8.0 has and the copy does not
@@ -200,6 +264,7 @@ sql -e "
         ';')
     FROM information_schema.COLUMNS c
     WHERE c.TABLE_SCHEMA='${REF}'
+      AND (${EXCL_COLS_SQL})
       AND EXISTS (SELECT 1 FROM information_schema.TABLES x
                   WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=c.TABLE_NAME)
       AND NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS y
@@ -207,7 +272,7 @@ sql -e "
                         AND y.COLUMN_NAME=c.COLUMN_NAME)
     ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION;" > "$ALTERS_FILE"
 ALTER_COUNT="$(grep -c . "$ALTERS_FILE" || true)"
-echo "-- 3/4 missing columns: ${ALTER_COUNT}"
+echo "-- 3/4 missing core/installed-module columns: ${ALTER_COUNT} (deferred to uninstalled 1.8.0 modules: ${#EXCL_COLS_LIST[@]})"
 
 # --------------------------------------------------------------------------
 # 4. Type differences: reported, never changed
@@ -242,8 +307,16 @@ echo "-- 4/4 columns whose type differs: ${MISMATCH_COUNT} (left untouched, list
         cat "$MISMATCH_FILE"
         echo
     fi
+    if [ "${#EXCL_TABLES_LIST[@]}" -gt 0 ] || [ "${#EXCL_COLS_LIST[@]}" -gt 0 ]; then
+        echo "-- ============ deferred to uninstalled 1.8.0 modules ============"
+        echo "-- Left out on purpose so each module's own install() creates them without"
+        echo "-- throwing SQLSTATE[42S21] 1060 Duplicate column name on unguarded ALTERs:"
+        [ "${#EXCL_TABLES_LIST[@]}" -gt 0 ] && echo "--   tables : ${EXCL_TABLES_LIST[*]}"
+        [ "${#EXCL_COLS_LIST[@]}" -gt 0 ] && echo "--   columns: ${EXCL_COLS_LIST[*]}"
+        echo
+    fi
     if [ "${#MISSING_TABLES[@]}" -gt 0 ]; then
-        echo "-- ============ ${#MISSING_TABLES[@]} tables new in 1.8.0, with reference rows ============"
+        echo "-- ============ ${#MISSING_TABLES[@]} core/installed-module tables new in 1.8.0 ============"
     fi
 } > "$OUT_FILE"
 
@@ -341,11 +414,13 @@ TABLES_AFTER="$(sql -e "SELECT COUNT(*) FROM information_schema.tables WHERE tab
 STILL_MISSING="$(sql -e "
     SELECT COUNT(*) FROM information_schema.TABLES t
     WHERE t.TABLE_SCHEMA='${REF}' AND t.TABLE_TYPE='BASE TABLE'
+      AND (${EXCL_TABLES_SQL})
       AND NOT EXISTS (SELECT 1 FROM information_schema.TABLES x
                       WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=t.TABLE_NAME);")"
 COLS_STILL_MISSING="$(sql -e "
     SELECT COUNT(*) FROM information_schema.COLUMNS c
     WHERE c.TABLE_SCHEMA='${REF}'
+      AND (${EXCL_COLS_SQL})
       AND EXISTS (SELECT 1 FROM information_schema.TABLES x
                   WHERE x.TABLE_SCHEMA='${DST}' AND x.TABLE_NAME=c.TABLE_NAME)
       AND NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS y
@@ -354,9 +429,9 @@ COLS_STILL_MISSING="$(sql -e "
 
 echo
 echo "== done."
-echo "   ${DST}: ${TABLES_BEFORE} -> ${TABLES_AFTER} tables (+$((TABLES_AFTER - TABLES_BEFORE)))"
-echo "   tables still missing vs 1.8.0 : ${STILL_MISSING}   (want 0)"
-echo "   columns still missing vs 1.8.0: ${COLS_STILL_MISSING}   (want 0)"
+echo "   ${DST}: ${TABLES_BEFORE} -> ${TABLES_AFTER} tables (+$((TABLES_AFTER - TABLES_BEFORE)); ${#EXCL_TABLES_LIST[@]} deferred to uninstalled 1.8.0 modules)"
+echo "   tables still missing vs 1.8.0 : ${STILL_MISSING}   (want 0; excludes ${#EXCL_TABLES_LIST[@]} module-owned)"
+echo "   columns still missing vs 1.8.0: ${COLS_STILL_MISSING}   (want 0; excludes ${#EXCL_COLS_LIST[@]} module-owned)"
 echo "   type differences left alone   : ${MISMATCH_COUNT} (grep '^-- DIFFERS' ${OUT_FILE})"
 echo
 echo "Next:"
