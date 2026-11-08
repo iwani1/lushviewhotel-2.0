@@ -141,17 +141,37 @@ echo "-- 2/4 missing tables: ${#MISSING_TABLES[@]}"
 # --------------------------------------------------------------------------
 # The definition is rebuilt from information_schema rather than parsed out of a
 # SHOW CREATE TABLE, so every column gets 1.8.0's exact type, nullability,
-# default, extra and comment. CURRENT_TIMESTAMP is emitted unquoted (quoting it
-# would store the literal string), and AUTO_INCREMENT / ON UPDATE are carried
-# over from `extra`.
+# default, extra and comment.
+#
+# COLUMN_DEFAULT needs care, and getting it wrong costs the whole migration:
+# MariaDB 10.2+ returns the default as a literal EXPRESSION, so a varchar
+# defaulting to image arrives as 'image' quotes included, and a default of NULL
+# arrives as the four-character string NULL rather than SQL NULL. Wrapping those
+# in QUOTE() produced DEFAULT '\'image\'' and DEFAULT 'NULL', which the client
+# rejected with "Unknown command" and error 1067. So: a value that already opens
+# with a quote (CHAR(39)) is emitted verbatim, the string NULL becomes an
+# unquoted DEFAULT NULL, numeric types and CURRENT_TIMESTAMP are emitted
+# verbatim, and only a genuinely bare string is quoted. That covers MariaDB and
+# MySQL, which return the unquoted form.
 ALTERS_FILE="$(mktemp)"
 sql -e "
     SELECT CONCAT(
         'ALTER TABLE \`', c.TABLE_NAME, '\` ADD COLUMN \`', c.COLUMN_NAME, '\` ', c.COLUMN_TYPE,
         IF(c.IS_NULLABLE='NO', ' NOT NULL', ' NULL'),
         CASE
-            WHEN c.COLUMN_DEFAULT IS NULL THEN IF(c.IS_NULLABLE='NO', '', ' DEFAULT NULL')
-            WHEN UPPER(c.COLUMN_DEFAULT)='CURRENT_TIMESTAMP' THEN ' DEFAULT CURRENT_TIMESTAMP'
+            WHEN c.COLUMN_DEFAULT IS NULL
+                THEN IF(c.IS_NULLABLE='NO', '', ' DEFAULT NULL')
+            WHEN UPPER(c.COLUMN_DEFAULT)='NULL'
+                THEN ' DEFAULT NULL'
+            WHEN LEFT(c.COLUMN_DEFAULT, 1) = CHAR(39)
+                THEN CONCAT(' DEFAULT ', c.COLUMN_DEFAULT)
+            WHEN UPPER(c.COLUMN_DEFAULT) LIKE 'CURRENT_TIMESTAMP%'
+                THEN CONCAT(' DEFAULT ', c.COLUMN_DEFAULT)
+            WHEN UPPER(c.COLUMN_DEFAULT) IN ('TRUE','FALSE')
+                THEN CONCAT(' DEFAULT ', c.COLUMN_DEFAULT)
+            WHEN c.DATA_TYPE IN ('tinyint','smallint','mediumint','int','bigint',
+                                 'decimal','float','double','bit')
+                THEN CONCAT(' DEFAULT ', c.COLUMN_DEFAULT)
             ELSE CONCAT(' DEFAULT ', QUOTE(c.COLUMN_DEFAULT))
         END,
         CASE
@@ -257,9 +277,9 @@ set -e
 grep -v "Using a password on the command line" "$ERR_FILE" > "${ERR_FILE}.tmp" 2>/dev/null || true
 mv -f "${ERR_FILE}.tmp" "$ERR_FILE"
 if [ -s "$ERR_FILE" ]; then
-    ERR_COUNT="$(grep -c . "$ERR_FILE" || true)"
+    ERR_COUNT="$(grep -c '^ERROR' "$ERR_FILE" || true)"
     echo
-    echo "!! ${ERR_COUNT} statement(s) failed while applying - the rest were applied anyway."
+    echo "!! ${ERR_COUNT} error(s) while applying - every other statement was applied anyway."
     head -20 "$ERR_FILE"
     echo "!! full list: ${ERR_FILE}"
 else
