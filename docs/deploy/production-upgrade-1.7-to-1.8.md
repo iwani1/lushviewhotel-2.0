@@ -108,19 +108,30 @@ Nothing here changes anything. Every query runs against the **local copy**.
         now defers all **5 tables and 8 columns** owned by those three
         uninstalled modules so step 6.1 installs them cleanly against unmodified
         upstream 1.8.0 code. Regenerate `002` locally before section 3.
-- [ ] **1.4 Find every non-standard file on the live server.** In cPanel File
-      Manager, compare `public_html/modules/` and `public_html/override/`
-      against this repository's `modules/` and `override/`. Anything on live that
-      is not in the repository is custom code that must be carried across —
-      `modules/cashpayment` is the one we know about; there may be others.
-      Record the list.
-- [ ] **1.5 Decide the bed-type question** (TASKS row B2): 9 bed types and 8
-      room-type assignments have no target table in 1.8.0. Choose keep-as-orphans
-      / re-model as amenities / accept the loss. Small, but it is data.
-- [ ] **1.6 Confirm hosting facts.** PHP selector offers 8.2–8.5 (live already
-      runs 8.4.27, which is inside 1.8.0's window); free disk for a second copy
-      of the code and a second database; cPanel Backup available; whether SSH is
-      enabled on your plan.
+- [x] **1.4 Non-standard files on the live server audited (`lvhaudit`, 2026-11-08).**
+      Verified directly on live via normalized SHA-256 comparison against `v1.7.0`:
+      - **`override/`:** `0` custom files.
+      - **Themes & PDF templates:** `0` modified files.
+      - **`classes/Profile.php`:** Only core PHP file edited on live (integer cast fix
+        for `view`/`add`/`edit`/`delete` on MariaDB/PHP 8), already included upstream in
+        QloApps `1.8.0` (`classes/Profile.php:156-161`). Safe to replace.
+      - **`cashpayment` (`2.6.8`):** Confirmed **DB-only orphan** (`public_html/modules/cashpayment/`
+        does not exist on disk; `modules/cheque/cheque.php` was edited in place with
+        `$this->name = 'cashpayment'`, `0` orders ever used it). Safe to replace
+        `modules/cheque/` with clean 1.8.0 and purge the orphan `cashpayment` row
+        (`id_module = 55`) from `qlo_module*` / `qlo_hook_module`.
+      - **Brand images:** Custom logos live in `public_html/img/` (`lushviewhotelnet-logo-*.jpg`,
+        `favicon.ico`, `hotel_header_image_*.jpg`) and carry over automatically in step 4.2.
+- [ ] **1.5 Decide the bed-type question** (TASKS row B2): 9 bed types (`Twin`..`Murphy`)
+      and 8 room-type assignments (`Double Standard`: Queen/King; `Executive`: King/Cal King;
+      `Suites`: Cal King/Sofa; `Standard`: King/Cal King) have no target table in 1.8.0.
+      Choose keep-as-orphans / re-model as room features / accept the loss.
+- [ ] **1.6 Confirm hosting disk/inode quota & clear full mailbox (`URGENT`, caught 2026-11-08).**
+      Runtime is confirmed ready (`PHP 8.4.27` LiteSpeed, `512M` memory, `600s` max execution,
+      `MariaDB 11.4.13`, all 9 required 1.8.0 extensions loaded). **However**, live `qlo_log`
+      shows `550 Mailbox is full / Blocks limit exceeded / Inode limit exceeded` today after
+      `10,629` internal `order_conf_admin` emails. Clear the cPanel mailbox and verify free
+      disk + inode headroom **before** step 2.1 so backups and zip extraction cannot fail mid-cutover.
 - [ ] **1.7 Book the window.** 30–60 minutes of maintenance mode, plus a full
       day for verification afterwards. Choose the lowest-traffic night. Do not
       start this late in the day with no time to verify.

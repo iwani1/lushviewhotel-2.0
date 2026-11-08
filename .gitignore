@@ -258,6 +258,9 @@ admin/themes/default/css/screen.css
 robots.txt
 # Generated installable module archives (built via dev/scripts/pack-lvhaudit.sh)
 /releases/
+# Live audit export bundles - never commit operational metrics to Git
+lushview-live-audit-*.zip
+lushview-live-audit-*.json
 
 # Database dumps and data exports - never commit production data
 *.sql
