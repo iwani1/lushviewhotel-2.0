@@ -12,6 +12,7 @@ import os, sys, zipfile
 
 repo_root, out_dir = sys.argv[1], sys.argv[2]
 modules = [
+    'lvhadminclean',
     'lvhauditlog',
     'lvhpayments',
     'lvhhousekeeping',

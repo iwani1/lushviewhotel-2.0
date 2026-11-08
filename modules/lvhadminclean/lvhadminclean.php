@@ -1,39 +1,24 @@
 <?php
 /**
- * Lush View Hotel - removes the promotional content from the back office.
+ * Lush View Hotel - Complete Ad Blocker & White-Label Rebranding Module.
  *
- * QloApps injects advertising into the admin panel: a "recommendation" banner
- * whose HTML is fetched from api.qloapps.com once a day and cached in
- * cache/dashboard_recommendation.html and cache/catalog_recommendation.html,
- * plus a "Help Center" panel that links to the QloApps Addons shop.
+ * Compatible with BOTH QloApps 1.7.x (live lushviewhotel.net) and QloApps 1.8.x
+ * with zero edits to core application or theme files:
  *
- * The request that fetches the banner (Tools::addonsRequest, classes/Tools.php:3375)
- * also sends the shop domain, the shop email address, the QloApps version, the
- * language and the country. Blocking it therefore removes the ads AND stops
- * that data from leaving the server.
- *
- * How this module removes them, without editing a single application file:
- *
- *   1. hooks displayBackOfficeHeader, which QloApps prints inside <head>
- *      (admin-dev/themes/default/template/header.tpl:102) AFTER jQuery and
- *      admin.js are loaded (line 98-100) and BEFORE the inline
- *      loadRecommendation() call in the page body, so overriding that function
- *      here wins;
- *   2. redefines loadRecommendation()/closeRecommendation() as no-ops, so the
- *      banner HTML is never requested and never injected;
- *   3. registers a jQuery ajaxPrefilter that aborts the request anyway, in case
- *      anything else issues it;
- *   4. hides #recommendation-wrapper and its skeleton with CSS, so even a stale
- *      cached banner cannot flash on screen;
- *   5. removes the commercial "QloApps Addons" entry from the Help Center
- *      panel, keeping the genuinely useful documentation and forum links.
- *
- * Deleting the markup from the core templates instead would be a smaller diff,
- * but it edits application files and is silently reverted by every upgrade.
- * This module is disabled or uninstalled from the back office in one click.
- *
- * Inventory of every promotional surface, and what was deliberately left alone,
- * is in docs/project/07-backoffice-ads.md.
+ *   1. Blocks all QloApps/Webkul advertising banners (including the Google Hotel
+ *      Connector promo carousel on Dashboard & Modules Catalog), deletes cached
+ *      ad HTML, and aborts background phone-home calls (`getRecommendationContent`,
+ *      `recommendationClosed`, `checkUpgrade`) to `api.qloapps.com`.
+ *   2. Removes top-bar "Explore QloApps Addons", toolbar "Recommendations",
+ *      Dashboard "QLOAPPS UPDATE" and "HELP CENTER" panels (expanding the main
+ *      Dashboard operations/revenue grid cleanly across the screen), and Addons
+ *      upsell badges/forms.
+ *   3. Replaces the top-left QloApps logo & version string, Back-Office Footer,
+ *      Back-Office Login screen (`AdminLogin`), Guest Website Footer ("Powered by
+ *      QloApps"), `<title>` tags, and all visible "QloApps" / "Webkul" text with
+ *      "Lush View Hotel".
+ *   4. Synchronizes `PS_SHOP_NAME`, `WK_HTL_CHAIN_NAME`, and `WK_TITLE_HEADER_BLOCK`
+ *      to "Lush View Hotel" and clears default `qloapps` social placeholder URLs.
  *
  * NOTICE OF LICENSE
  *
@@ -52,175 +37,357 @@ if (!defined('_PS_VERSION_')) {
 
 class LvhAdminClean extends Module
 {
-    const KEY_BLOCK_BANNER   = 'LVH_ADS_BLOCK_BANNER';
-    const KEY_STRIP_ADDONS   = 'LVH_ADS_STRIP_ADDONS_LINK';
-    const KEY_HIDE_HELP      = 'LVH_ADS_HIDE_HELP_PANEL';
+    const KEY_BRAND_NAME   = 'LVH_WL_BRAND_NAME';
+    const KEY_BLOCK_BANNER = 'LVH_ADS_BLOCK_BANNER';
+    const KEY_HIDE_HELP    = 'LVH_ADS_HIDE_HELP_PANEL';
+    const KEY_REPLACE_TEXT = 'LVH_WL_REPLACE_TEXT';
+    const KEY_HIDE_DEMO    = 'LVH_WL_HIDE_DEMO_BTN';
+    const KEY_STRIP_ADDONS = 'LVH_ADS_STRIP_ADDONS_LINK';
 
-    /** Ad HTML cached by the core, relative to the shop root. */
+    /** Cached ad and upgrade files written by core `addonsRequest()`. */
     protected static $adCacheFiles = array(
         '/cache/dashboard_recommendation.html',
         '/cache/catalog_recommendation.html',
+        '/config/xml/upgrade_available.xml',
     );
 
     public function __construct()
     {
         $this->name = 'lvhadminclean';
         $this->tab = 'administration';
-        $this->version = '0.1.0';
+        $this->version = '2.0.0';
         $this->author = 'Lush View Hotel';
+        $this->need_instance = 0;
         $this->bootstrap = true;
 
         parent::__construct();
 
-        $this->displayName = 'LVH Admin Clean';
-        $this->description = 'Removes the QloApps advertising banner and the Addons shop link from the back office, and stops the request that sends your domain, email and version to api.qloapps.com.';
+        $this->displayName = $this->l('LVH White-Label & Ad Blocker');
+        $this->description = $this->l('Blocks all QloApps ads & phone-home banners, removes Addons/Update/Help clutter, and replaces all QloApps/Webkul text & logos with Lush View Hotel.');
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
     }
 
+    /**
+     * Install hooks, apply white-label defaults, sync core shop name, and purge ad caches.
+     *
+     * @return bool
+     */
     public function install()
     {
-        if (!parent::install() || !$this->registerHook('displayBackOfficeHeader')) {
+        if (!parent::install()
+            || !$this->registerHook('displayBackOfficeHeader')
+            || !$this->registerHook('actionAdminLoginControllerSetMedia')
+            || !$this->registerHook('displayAdminLogin')
+            || !$this->registerHook('displayHeader')
+        ) {
             return false;
         }
 
-        $defaults = array(
-            self::KEY_BLOCK_BANNER => '1',
-            self::KEY_STRIP_ADDONS => '1',
-            self::KEY_HIDE_HELP    => '0',
-        );
-        foreach ($defaults as $key => $value) {
-            if (Configuration::get($key) === false) {
-                Configuration::updateValue($key, $value);
-            }
-        }
-
-        // Generated ad cache, not application files: safe to delete, and it
-        // stops a previously downloaded banner from being served once more.
-        foreach (self::$adCacheFiles as $file) {
-            $path = _PS_ROOT_DIR_ . $file;
-            if (file_exists($path)) {
-                @unlink($path);
-            }
-        }
+        $this->applyDefaultConfig(true);
+        $this->syncCoreBrandSettings(self::getBrandName());
+        $this->purgeAdCacheFiles();
 
         return true;
     }
 
+    /**
+     * Clean up module-owned configuration keys on uninstall.
+     *
+     * @return bool
+     */
     public function uninstall()
     {
-        if (!parent::uninstall()) {
-            return false;
-        }
-        foreach (array(self::KEY_BLOCK_BANNER, self::KEY_STRIP_ADDONS, self::KEY_HIDE_HELP) as $key) {
+        $keys = array(
+            self::KEY_BRAND_NAME,
+            self::KEY_BLOCK_BANNER,
+            self::KEY_HIDE_HELP,
+            self::KEY_REPLACE_TEXT,
+            self::KEY_HIDE_DEMO,
+            self::KEY_STRIP_ADDONS,
+        );
+        foreach ($keys as $key) {
             Configuration::deleteByName($key);
         }
 
-        return true;
+        return parent::uninstall();
     }
 
-    public function hookDisplayBackOfficeHeader($params)
+    /**
+     * Initialize or upgrade default configuration flags.
+     *
+     * @param bool $forceEnableWhiteLabel
+     */
+    public function applyDefaultConfig($forceEnableWhiteLabel = false)
     {
-        $blockBanner = (bool) Configuration::get(self::KEY_BLOCK_BANNER);
-        $stripAddons = (bool) Configuration::get(self::KEY_STRIP_ADDONS);
-        $hideHelp    = (bool) Configuration::get(self::KEY_HIDE_HELP);
+        $defaults = array(
+            self::KEY_BRAND_NAME   => 'Lush View Hotel',
+            self::KEY_BLOCK_BANNER => '1',
+            self::KEY_HIDE_HELP    => '1',
+            self::KEY_REPLACE_TEXT => '1',
+            self::KEY_HIDE_DEMO    => '0',
+            self::KEY_STRIP_ADDONS => '1',
+        );
 
-        if (!$blockBanner && !$stripAddons && !$hideHelp) {
+        foreach ($defaults as $key => $val) {
+            if (Configuration::get($key) === false || ($forceEnableWhiteLabel && $key === self::KEY_HIDE_HELP)) {
+                Configuration::updateValue($key, $val);
+            }
+        }
+    }
+
+    /**
+     * Synchronize QloApps core shop & header brand titles and clear `qloapps` social placeholders.
+     *
+     * @param string $brandName
+     */
+    public function syncCoreBrandSettings($brandName)
+    {
+        $brandName = trim((string) $brandName);
+        if ($brandName === '') {
+            $brandName = 'Lush View Hotel';
+        }
+
+        Configuration::updateValue('PS_SHOP_NAME', $brandName);
+        Configuration::updateValue('WK_HTL_CHAIN_NAME', $brandName);
+        Configuration::updateValue('WK_TITLE_HEADER_BLOCK', $brandName);
+
+        // Multi-language fallback in case a module reads language-indexed keys
+        $langs = Language::getLanguages(false);
+        if (is_array($langs)) {
+            $multi = array();
+            foreach ($langs as $l) {
+                $multi[(int) $l['id_lang']] = $brandName;
+            }
+            Configuration::updateValue('WK_HTL_CHAIN_NAME', $multi);
+            Configuration::updateValue('WK_TITLE_HEADER_BLOCK', $multi);
+        }
+
+        // Remove placeholder QloApps social URLs if untouched
+        $socialKeys = array(
+            'BLOCKSOCIAL_FACEBOOK',
+            'BLOCKSOCIAL_TWITTER',
+            'BLOCKSOCIAL_RSS',
+            'BLOCKSOCIAL_YOUTUBE',
+            'BLOCKSOCIAL_GOOGLE_PLUS',
+            'BLOCKSOCIAL_PINTEREST',
+            'BLOCKSOCIAL_VIMEO',
+            'BLOCKSOCIAL_INSTAGRAM',
+        );
+        foreach ($socialKeys as $sk) {
+            $cur = (string) Configuration::get($sk);
+            if ($cur !== '' && (stripos($cur, 'qloapps') !== false || stripos($cur, 'prestashop') !== false || stripos($cur, 'webkul') !== false)) {
+                Configuration::updateValue($sk, '');
+            }
+        }
+    }
+
+    /**
+     * Delete any cached remote ad banners or upgrade XML notices.
+     */
+    public function purgeAdCacheFiles()
+    {
+        foreach (self::$adCacheFiles as $relPath) {
+            $full = _PS_ROOT_DIR_ . $relPath;
+            if (is_file($full)) {
+                @unlink($full);
+            }
+        }
+    }
+
+    /**
+     * Resolve configured hotel brand name.
+     *
+     * @return string
+     */
+    public static function getBrandName()
+    {
+        $b = trim((string) Configuration::get(self::KEY_BRAND_NAME));
+        return $b !== '' ? $b : 'Lush View Hotel';
+    }
+
+    /**
+     * Resolve custom hotel logo URL if a real non-default logo exists in `/img/`.
+     *
+     * @return string
+     */
+    protected function getCustomLogoUrl()
+    {
+        $logo = trim((string) Configuration::get('PS_LOGO'));
+        if ($logo === '' || preg_match('/^logo\.(jpg|jpeg|png|gif)$/i', $logo)) {
             return '';
         }
-
-        $css = '#recommendation-wrapper,#recommendation-wrapper-skeleton{display:none !important;}';
-        if ($hideHelp) {
-            $css .= '.dash_links{display:none !important;}';
+        if (defined('_PS_IMG_DIR_') && is_file(_PS_IMG_DIR_ . $logo)) {
+            return _PS_IMG_ . $logo;
         }
-
-        $js = array();
-        $js[] = "(function () {";
-        $js[] = "'use strict';";
-        if ($blockBanner) {
-            // Runs in <head>, so this replaces admin.js's loader before the
-            // inline loadRecommendation() call in the page body executes.
-            $js[] = "window.loadRecommendation = function () {};";
-            $js[] = "window.closeRecommendation = function () {};";
-        }
-        if ($blockBanner || $stripAddons) {
-            $js[] = "function whenJQuery(fn) {";
-            $js[] = "if (window.jQuery) { fn(window.jQuery); } else { setTimeout(function () { whenJQuery(fn); }, 10); }";
-            $js[] = "}";
-            $js[] = "whenJQuery(function ($) {";
-            if ($blockBanner) {
-                $js[] = "$.ajaxPrefilter(function (options, original, jqXHR) {";
-                $js[] = "var data = original && original.data, action = '';";
-                $js[] = "if (data && typeof data === 'object') { action = String(data.action || ''); }";
-                $js[] = "else if (data) { action = String(data); }";
-                $js[] = "if (action === 'getRecommendationContent' || action === 'recommendationClosed') { jqXHR.abort(); }";
-                $js[] = "});";
-            }
-            if ($stripAddons && !$hideHelp) {
-                $js[] = "$(function () {";
-                $js[] = "$('.dash_links dl').each(function () {";
-                $js[] = "var href = $(this).find('dt a').attr('href') || '';";
-                $js[] = "if (/qloapps\\.com\\/addons/i.test(href)) { $(this).remove(); }";
-                $js[] = "});";
-                $js[] = "});";
-            }
-            $js[] = "});";
-        }
-        $js[] = "})();";
-
-        return '<style>' . $css . '</style>' . "\n"
-             . '<script>' . implode("\n", $js) . '</script>' . "\n";
+        return '';
     }
 
+    /**
+     * Build JS configuration payload shared by Back-Office and Login pages.
+     *
+     * @return array
+     */
+    protected function getJsConfig()
+    {
+        $this->applyDefaultConfig(false);
+
+        return array(
+            'brand' => self::getBrandName(),
+            'blockAds' => (bool) Configuration::get(self::KEY_BLOCK_BANNER),
+            'hideHelpAndUpdate' => (bool) Configuration::get(self::KEY_HIDE_HELP),
+            'hideDemoBtn' => (bool) Configuration::get(self::KEY_HIDE_DEMO),
+            'replaceText' => (bool) Configuration::get(self::KEY_REPLACE_TEXT),
+            'customLogoUrl' => $this->getCustomLogoUrl(),
+        );
+    }
+
+    /**
+     * Inject CSS + JS into `<head>` on every Back-Office screen.
+     *
+     * Inline injection inside `displayBackOfficeHeader` guarantees execution AFTER
+     * jQuery & `js/admin.js` and BEFORE inline `loadRecommendation()` calls in `<body>`,
+     * and works immediately even before module upgrade scripts run.
+     *
+     * @param array $params
+     * @return string
+     */
+    public function hookDisplayBackOfficeHeader($params)
+    {
+        $cfg = $this->getJsConfig();
+        if ($cfg['blockAds']) {
+            $this->purgeAdCacheFiles();
+        }
+
+        $cssPath = dirname(__FILE__) . '/views/css/lvh-whitelabel-bo.css';
+        $jsPath  = dirname(__FILE__) . '/views/js/lvh-whitelabel-bo.js';
+
+        $css = is_file($cssPath) ? file_get_contents($cssPath) : '';
+        if (!$cfg['replaceText']) {
+            // If white-label text replacement is turned off, keep only ad-blocking rules
+            $css = '#recommendation-wrapper,#recommendation-wrapper-skeleton,.alert-addons{display:none !important;}';
+        }
+
+        $js = is_file($jsPath) ? file_get_contents($jsPath) : '';
+
+        return '<style type="text/css">' . $css . '</style>' . "\n"
+            . '<script type="text/javascript">window.LVH_WHITELABEL_CFG = ' . json_encode($cfg) . ";\n"
+            . $js . '</script>' . "\n";
+    }
+
+    /**
+     * Rebrand the Back-Office Login page (`AdminLogin`) via media assets.
+     */
+    public function hookActionAdminLoginControllerSetMedia()
+    {
+        $cfg = $this->getJsConfig();
+        Media::addJsDef(array('LVH_WHITELABEL_CFG' => $cfg));
+        if (isset($this->context->controller)) {
+            $this->context->controller->addCSS($this->_path . 'views/css/lvh-whitelabel-bo.css', 'all');
+            $this->context->controller->addJS($this->_path . 'views/js/lvh-whitelabel-bo.js');
+        }
+    }
+
+    /**
+     * Fallback inline white-label payload on `AdminLogin` (covers 1.7.x & 1.8.x).
+     *
+     * @return string
+     */
+    public function hookDisplayAdminLogin()
+    {
+        return $this->hookDisplayBackOfficeHeader(array());
+    }
+
+    /**
+     * Clean Guest-Facing Website Footer ("| Powered by QloApps") & titles on 1.7.x and 1.8.x.
+     *
+     * @return string
+     */
+    public function hookDisplayHeader()
+    {
+        if (!Configuration::get(self::KEY_REPLACE_TEXT)) {
+            return '';
+        }
+        $brand = self::getBrandName();
+        $foJsPath = dirname(__FILE__) . '/views/js/lvh-whitelabel-fo.js';
+        $foJs = is_file($foJsPath) ? file_get_contents($foJsPath) : '';
+
+        return '<style type="text/css">.copyRightWrapper a[href*="qloapps.com"], .copyRight a[href*="qloapps.com"] { display: none !important; }</style>' . "\n"
+            . '<script type="text/javascript">window.LVH_FO_BRAND = ' . json_encode($brand) . ";\n"
+            . $foJs . '</script>' . "\n";
+    }
+
+    /**
+     * Module configuration screen (`Modules -> LVH White-Label & Ad Blocker -> Configure`).
+     *
+     * @return string
+     */
     public function getContent()
     {
+        $this->applyDefaultConfig(false);
         $output = '';
 
         if (Tools::isSubmit('submitLvhAdminClean')) {
-            foreach (array(self::KEY_BLOCK_BANNER, self::KEY_STRIP_ADDONS, self::KEY_HIDE_HELP) as $key) {
-                Configuration::updateValue($key, Tools::getValue($key) ? '1' : '0');
+            $brandName = trim((string) Tools::getValue(self::KEY_BRAND_NAME, 'Lush View Hotel'));
+            if ($brandName === '') {
+                $brandName = 'Lush View Hotel';
             }
-            foreach (self::$adCacheFiles as $file) {
-                $path = _PS_ROOT_DIR_ . $file;
-                if (file_exists($path)) {
-                    @unlink($path);
-                }
+
+            Configuration::updateValue(self::KEY_BRAND_NAME, $brandName);
+            Configuration::updateValue(self::KEY_BLOCK_BANNER, Tools::getValue(self::KEY_BLOCK_BANNER) ? '1' : '0');
+            Configuration::updateValue(self::KEY_HIDE_HELP, Tools::getValue(self::KEY_HIDE_HELP) ? '1' : '0');
+            Configuration::updateValue(self::KEY_REPLACE_TEXT, Tools::getValue(self::KEY_REPLACE_TEXT) ? '1' : '0');
+            Configuration::updateValue(self::KEY_HIDE_DEMO, Tools::getValue(self::KEY_HIDE_DEMO) ? '1' : '0');
+            Configuration::updateValue(self::KEY_STRIP_ADDONS, '1');
+
+            if (Configuration::get(self::KEY_REPLACE_TEXT)) {
+                $this->syncCoreBrandSettings($brandName);
             }
-            $output .= $this->displayConfirmation('Settings saved and any cached advertising removed.');
+            $this->purgeAdCacheFiles();
+
+            $output .= $this->displayConfirmation($this->l('White-label & ad-blocker settings saved, shop titles updated, and cached ads purged.'));
         }
 
-        $rows = array(
+        $action = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+        $brandVal = htmlspecialchars(self::getBrandName(), ENT_QUOTES, 'UTF-8');
+
+        $toggles = array(
             self::KEY_BLOCK_BANNER => array(
-                'label' => 'Block the advertising banner',
-                'help'  => 'Stops the daily request to api.qloapps.com that fetches the promotional banner on the Dashboard and Modules Catalog pages, '
-                         . 'and hides any copy already downloaded. That request also carries your shop domain, shop email, QloApps version, language and country.',
-            ),
-            self::KEY_STRIP_ADDONS => array(
-                'label' => 'Remove the "QloApps Addons" shop link',
-                'help'  => 'Deletes only the commercial entry from the Help Center panel. The documentation, forum and contact links stay, because they are useful.',
+                'label' => $this->l('Block all promotional banners, Addons links & phone-home requests'),
+                'help'  => $this->l('Removes the Dashboard & Modules Catalog ad carousels (e.g. Google Hotel Connector banner), top-bar "Explore QloApps Addons", toolbar "Recommendations", and aborts background requests to api.qloapps.com.'),
             ),
             self::KEY_HIDE_HELP => array(
-                'label' => 'Hide the whole Help Center panel',
-                'help'  => 'Removes the documentation and forum links too. Off by default.',
+                'label' => $this->l('Hide Dashboard "QloApps Update" & "Help Center" right-hand boxes'),
+                'help'  => $this->l('Removes the right-column Update & Help Center boxes on the Dashboard and expands Operations Today & Revenue across the full width.'),
+            ),
+            self::KEY_REPLACE_TEXT => array(
+                'label' => $this->l('Replace all QloApps / Webkul logos & text with Brand Name'),
+                'help'  => $this->l('Rebrands the top-left header bar, browser tab titles, Back-Office login screen, Back-Office footer, Guest Website copyright footer, and all visible "QloApps" / "Webkul" text.'),
+            ),
+            self::KEY_HIDE_DEMO => array(
+                'label' => $this->l('Hide Dashboard "Demo mode" button'),
+                'help'  => $this->l('Optional: hides the Demo mode switch on the Dashboard so staff never toggle fake demo figures by mistake.'),
             ),
         );
 
-        $action = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
-
         $html  = '<div class="panel">';
-        $html .= '<h3><i class="icon-ban-circle"></i> ' . $this->displayName . '</h3>';
-        $html .= '<p>Nothing here edits a QloApps file: the changes are injected into the admin header and disappear '
-               . 'the moment this module is disabled. Full inventory of every promotional surface, including the ones '
-               . 'left alone and why: <code>docs/project/07-backoffice-ads.md</code>.</p>';
+        $html .= '<h3><i class="icon-shield"></i> ' . htmlspecialchars($this->displayName, ENT_QUOTES, 'UTF-8') . '</h3>';
+        $html .= '<p class="text-muted">' . $this->l('100% module-based white-labelling and ad blocking — zero core or theme files are modified, so upgrades stay clean.') . '</p>';
         $html .= '<form method="post" action="' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8') . '">';
-        $html .= '<table class="table">';
-        foreach ($rows as $key => $row) {
+        $html .= '<div class="form-group" style="max-width: 420px; margin-bottom: 18px;">';
+        $html .= '<label><strong>' . $this->l('Hotel Brand Name') . '</strong></label>';
+        $html .= '<input type="text" name="' . self::KEY_BRAND_NAME . '" value="' . $brandVal . '" class="form-control" required="required" />';
+        $html .= '<p class="help-block">' . $this->l('Displayed in the top bar, login screen, page titles, website header/footer, and wherever QloApps text appeared.') . '</p>';
+        $html .= '</div>';
+
+        $html .= '<table class="table table-striped">';
+        foreach ($toggles as $key => $meta) {
             $checked = Configuration::get($key) ? ' checked="checked"' : '';
-            $html .= '<tr><td style="width:30%"><label><input type="checkbox" name="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '"'
-                   . $checked . ' /> ' . htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') . '</label>'
-                   . '<p class="help-block">' . htmlspecialchars($row['help'], ENT_QUOTES, 'UTF-8') . '</p></td></tr>';
+            $html .= '<tr><td><label style="font-weight:600;"><input type="checkbox" name="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '" value="1"'
+                . $checked . ' /> ' . htmlspecialchars($meta['label'], ENT_QUOTES, 'UTF-8') . '</label>'
+                . '<p class="help-block" style="margin:4px 0 0;">' . htmlspecialchars($meta['help'], ENT_QUOTES, 'UTF-8') . '</p></td></tr>';
         }
         $html .= '</table>';
-        $html .= '<button type="submit" name="submitLvhAdminClean" class="btn btn-primary">Save</button>';
+        $html .= '<button type="submit" name="submitLvhAdminClean" class="btn btn-primary"><i class="icon-save"></i> ' . $this->l('Save & Apply White-Label') . '</button>';
         $html .= '</form></div>';
 
         return $output . $html;

@@ -1,0 +1,112 @@
+/**
+ * Lush View Hotel - Back-Office Ad Blocker & White-Label Stylesheet
+ * Compatible with QloApps 1.7.x and 1.8.x (zero core edits).
+ */
+
+/* 1. Block Dashboard & Catalog Promotional Ad Carousels (e.g. Google Hotel Connector ad) */
+#recommendation-wrapper,
+#recommendation-wrapper-skeleton,
+.qghc-dash-banner,
+#addons-search-form,
+#module-modal-import .alert-addons,
+.alert-addons {
+    display: none !important;
+}
+
+/* 2. Hide Top-Left QloApps Logo Image & Version Number (#header_shopversion) */
+#header_shopversion,
+#header_shopversion #shop_version {
+    display: none !important;
+    background: none !important;
+    width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Style Top-Left Hotel Brand Badge (#header_shopname) */
+.bootstrap #header_infos #header_shopname {
+    font-weight: 700 !important;
+    font-size: 16px !important;
+    letter-spacing: 0.3px;
+    padding: 8px 14px !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff !important;
+}
+
+.bootstrap #header_infos #header_shopname::before {
+    content: "LVH";
+    display: inline-block;
+    background: #15803d;
+    color: #fef08a;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(254, 240, 138, 0.45);
+    letter-spacing: 0.6px;
+}
+
+/* 3. Hide Top-Right "Explore QloApps Addons", "QloApps Update Available", & "Hosted QloApps" */
+#header_employee_box a[href*="qloapps.com"],
+#header_employee_box a[href*="webkul.com"],
+#employee_links a[href*="qloapps.com"],
+#employee_links a[href*="webkul.com"] {
+    display: none !important;
+}
+
+/* 4. Hide Toolbar "Recommendations" Ad Modal Button Across All Admin Screens */
+#page-header-desc-configuration-modules-list,
+a[id^="page-header-desc-"][id$="-modules-list"],
+li:has(> a[id^="page-header-desc-"][id$="-modules-list"]),
+.process-icon-modules-list {
+    display: none !important;
+}
+
+/* 5. Hide Dashboard "QLOAPPS UPDATE" & "HELP CENTER" Right-Column Panels */
+body.admindashboard .dash_links,
+body.admindashboard #hookDashboardZoneThree .dash_version,
+body.admindashboard #dash_version,
+#block_upgrade,
+a[href*="qloapps.com/addons"],
+a[href*="store.webkul.com"] {
+    display: none !important;
+}
+
+/* Hide Module List Addons Marketplace Upsell Badges */
+.module-badge-bought,
+.module-badge-popular,
+.module-badge-partner {
+    display: none !important;
+}
+
+/* 6. Back-Office Footer Cleanup (hide Webkul & QloApps social/forum links) */
+#footer a[href*="webkul.com"],
+#footer a[href*="qloapps.com"],
+#footer a[href*="twitter.com/qloapps"],
+#footer a[href*="facebook.com/qloapps"],
+#footer a[href*="github.com/webkul"],
+#footer .footer-contact,
+#footer .social-networks {
+    display: none !important;
+}
+
+/* 7. Back-Office Login Screen Rebranding */
+#login-panel #login-header img#logo,
+#login-panel #login-header > div.text-center,
+#login-panel #login-footer a[href*="webkul.com"],
+#login-panel #login-footer a[href*="qloapps"],
+#login-panel #login-footer .link-social {
+    display: none !important;
+}
+
+.lvh-login-brand-title {
+    color: #14532d;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    margin: 6px 0 12px;
+    text-align: center;
+}

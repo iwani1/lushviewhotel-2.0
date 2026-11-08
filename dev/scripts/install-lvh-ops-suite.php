@@ -48,6 +48,8 @@ if (Validate::isLoadedObject($emp)) {
 }
 
 $suite = array(
+    'lvhadminclean',
+    'lvhbranding',
     'lvhauditlog',
     'lvhfrontdesk',
     'lvhpayments',
@@ -61,10 +63,18 @@ echo 'Database: ' . _DB_NAME_ . ' (QloApps ' . _PS_VERSION_ . ")\n\n";
 
 foreach ($suite as $modName) {
     if (Module::isInstalled($modName)) {
-        echo sprintf("  [SKIP] %-16s already installed (ensuring enabled)\n", $modName);
+        echo sprintf("  [SKIP] %-16s already installed (ensuring enabled & hooks synced)\n", $modName);
         $inst = Module::getInstanceByName($modName);
         if ($inst) {
             $inst->enable();
+            if ($modName === 'lvhadminclean' && method_exists($inst, 'applyDefaultConfig')) {
+                $inst->registerHook('actionAdminLoginControllerSetMedia');
+                $inst->registerHook('displayAdminLogin');
+                $inst->registerHook('displayHeader');
+                $inst->applyDefaultConfig(true);
+                $inst->syncCoreBrandSettings('Lush View Hotel');
+                $inst->purgeAdCacheFiles();
+            }
         }
         continue;
     }
