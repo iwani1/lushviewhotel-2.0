@@ -2,12 +2,18 @@
 #
 # Switch the local installation between the two development databases:
 #
-#   fresh  qloapps_fresh  - clean 1.8.0 install with sample data
-#   live   qloapps_live   - your real production data (1,934 bookings, 1,257 guests)
+#   fresh  qloapps_fresh  - clean 1.8.0 install, the schema reference
+#   live   qloapps_live   - your real production data on the 1.7.0 schema
+#                           (1,934 bookings, 1,257 guests). 1.8.0 code cannot
+#                           run on it: 36 tables it queries do not exist.
+#   18     qloapps_18     - a COPY of live, upgraded to the 1.8.0 schema by
+#                           dev/scripts/upgrade-live-copy.sh. This is the one
+#                           to use for real data on 1.8.0.
 #
 # Usage:
 #   dev/scripts/use-db.sh fresh
 #   dev/scripts/use-db.sh live
+#   dev/scripts/use-db.sh 18
 #   dev/scripts/use-db.sh            # just show which one is active
 #
 # What it does: rewrites _DB_NAME_ in config/settings.inc.php and clears the
@@ -26,14 +32,15 @@ current() {
 target="${1:-}"
 if [ -z "$target" ]; then
     echo "Active database: $(current)"
-    echo "Usage: dev/scripts/use-db.sh fresh|live"
+    echo "Usage: dev/scripts/use-db.sh fresh|live|18"
     exit 0
 fi
 
 case "$target" in
     fresh) db="qloapps_fresh" ;;
     live)  db="qloapps_live"  ;;
-    *) echo "error: unknown target '$target' (expected 'fresh' or 'live')" >&2; exit 1 ;;
+    18)    db="qloapps_18"    ;;
+    *) echo "error: unknown target '$target' (expected 'fresh', 'live' or '18')" >&2; exit 1 ;;
 esac
 
 if [ ! -f "$SETTINGS" ]; then
