@@ -74,4 +74,39 @@ Built strictly as self-contained QloApps 1.8.0 modules (`modules/lvh*/`), zero c
    - Staff Audit Log recording who created/modified a booking, posted a payment, granted a discount/`Approved by Management` comp, or changed room status (critical with 7 receptionists sharing shifts).
 
 6. **Upgrade & Hygiene Enhancements (`lvhbranding` + `lvhadminclean` + Mail/Tax Cleanup)**
-   - Expand `lvhbranding` + `lvhadminclean` to fix `'Hotel Prime'` / `'lushviewhotel.net'` titles, quiet the `order_conf_admin` email flood on walk-in orders, deactivate the 52 US state taxes, and optionally activate Ghana tax breakdown (`localization/gh.xml`).
+   - Expand `lvhbranding` + `lvhadminclean` to fix `'Hotel Prime'` / `'lushviewhotel.net'` titles, quiet the `order_conf_admin` email flood on walk-in orders, deactivate the 52 US state taxes, and keep room prices as flat all-inclusive GHS rates (`id_tax_rules_group = 0`).
+
+---
+
+## 4. Implemented Operational Suite & Installation
+
+All 6 modules are implemented in `modules/lvh*/` with **zero core edits** and register under the shared **`Lush View Ops`** (`AdminLvhOperations`) Back-Office sidebar menu:
+
+| Module | Admin Controller | Custom Tables (`qlo_lvh_*`) | Role Access Granted |
+|---|---|---|---|
+| `lvhfrontdesk` | `AdminLvhFrontDesk` | `lvh_guest_identification`, `lvh_folio_charge` | Receptionist, Supervisor, Manager, IT (R/W); Accountant (View) |
+| `lvhpayments` | `AdminLvhPayments` | `lvh_payment_meta`, `lvh_shift_cashup` | Receptionist, Supervisor, Accountant, Manager, IT |
+| `lvhhousekeeping` | `AdminLvhHousekeeping` | `lvh_room_housekeeping`, `lvh_housekeeping_log` | Receptionist, Supervisor, Manager, IT |
+| `lvhconference` | `AdminLvhConference` | `lvh_conference_booking` | Receptionist, Supervisor, Manager, IT (R/W); Accountant (View) |
+| `lvhreports` | `AdminLvhReports` | *(queries live + `lvh_*` tables)* | Supervisor, Accountant, Manager, IT, SuperAdmin |
+| `lvhauditlog` | `AdminLvhAuditLog` | `lvh_audit_log` | Supervisor, Accountant, Manager, IT, SuperAdmin (View/Export only) |
+
+### 1-Command Local (`qloapps_18`) or Cutover Installation
+
+```bash
+# Install all 6 modules and configure role permissions:
+podman-compose exec app php dev/scripts/install-lvh-ops-suite.php
+
+# Or install all 6 modules AND apply the 4 live hygiene remediations
+# (disable 52 US taxes keeping flat GHS rates, stop internal admin mail spam,
+#  purge orphan cashpayment / disable qlohotelreview, unpublish CON-1..CON-4
+#  from bedroom search, and set Lush View Hotel brand defaults):
+podman-compose exec app php dev/scripts/install-lvh-ops-suite.php --apply-hygiene
+```
+
+### Build Uploadable Module `.zip` Archives (`releases/*.zip`)
+
+```bash
+./dev/scripts/pack-lvh-ops-suite.sh
+```
+
