@@ -194,6 +194,16 @@ Nothing here changes anything. Every query runs against the **local copy**.
       `modules/lvhbranding/`, `modules/lvhadminclean/`, and
       `themes/hotel-reservation-theme/modules/hotelreservationsystem/` (the
       footer override). All three are new files; none of them replaces anything.
+- [ ] **4.4b Re-apply the three local modifications.** Verified by diffing this
+      repository against the upstream `v1.8.0` tag on 2026-11-08: exactly three
+      shared files differ, and a clean upstream zip will not contain them.
+
+      | File | Change | Carry to production? |
+      | --- | --- | --- |
+      | `admin-dev/themes/default/template/search_form.tpl:85` | `value="{$bo_query}"` becomes `value="{$bo_query\|escape:'html':'UTF-8'}"` | **Yes.** Reflected XSS in the back-office search box: an unescaped query is echoed into the page, so a crafted URL can run script in an administrator's session. One-line edit in File Manager after the upload |
+      | `composer.json` | the `"ext-mcrypt": "*"` requirement is removed | Only if you run `composer install` on the server. mcrypt was deleted from PHP in 7.2, so on PHP 8.4 the platform check fails without this |
+      | `.gitignore` | project rules for dumps and migrations | No — it has no meaning on a web server |
+
 - [ ] **4.5 Test the staged copy before touching production.** If your host
       allows subdomains, point `staging.lushviewhotel.net` at the staged
       directory and tell that database it is the shop's domain, otherwise the
