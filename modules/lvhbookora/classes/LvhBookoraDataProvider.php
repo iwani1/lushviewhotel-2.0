@@ -17,7 +17,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-require_once dirname(__FILE__) . '/../LvhBookoraRouteMap.php';
+require_once dirname(__FILE__) . '/LvhBookoraRouteMap.php';
 require_once dirname(__FILE__) . '/LvhBookoraImageManager.php';
 
 class LvhBookoraDataProvider
