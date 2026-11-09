@@ -351,7 +351,7 @@ class AdminLvhPaymentsController extends ModuleAdminController
 
         $extras = array();
         $extrasTotal = 0.0;
-        $hasFolioTable = Db::getInstance()->executeS("SHOW TABLES LIKE '" . pSQL($p . 'lvh_folio_charge') . "'");
+        $hasFolioTable = Db::getInstance()->executeS("SHOW TABLES LIKE '" . pSQL($p . 'lvh_folio_charge') . "'", true, false);
         if (!empty($hasFolioTable)) {
             $exRows = Db::getInstance()->executeS(
                 'SELECT * FROM `' . $p . 'lvh_folio_charge`
@@ -386,15 +386,24 @@ class AdminLvhPaymentsController extends ModuleAdminController
         $grandTotal = (float) $order->total_paid_tax_incl + $extrasTotal;
         $balanceDue = max(0.0, round($grandTotal - $paidTotal, 2));
 
-        $hotelRow = Db::getInstance()->getRow(
-            'SELECT `phone`, `address1`, `city` FROM `' . $p . 'htl_branch_info` hbi
-             LEFT JOIN `' . $p . 'htl_branch_info_lang` hbil ON (hbil.`id` = hbi.`id` AND hbil.`id_lang` = ' . $idLang . ')
-             ORDER BY hbi.`id` ASC'
+        $hotelAddrRow = Db::getInstance()->getRow(
+            'SELECT `address1`, `city`, COALESCE(NULLIF(`phone`, \'\'), `phone_mobile`) AS `phone`
+             FROM `' . $p . 'address`
+             WHERE `id_hotel` > 0 AND `deleted` = 0
+             ORDER BY `id_hotel` ASC, `id_address` DESC'
         );
-        $hotelAddress = !empty($hotelRow['address1'])
-            ? trim($hotelRow['address1'] . (!empty($hotelRow['city']) ? ', ' . $hotelRow['city'] : ''))
+        $addrLine = !empty($hotelAddrRow['address1'])
+            ? (string) $hotelAddrRow['address1']
+            : (string) Configuration::get('PS_SHOP_ADDR1');
+        $cityLine = !empty($hotelAddrRow['city'])
+            ? (string) $hotelAddrRow['city']
+            : (string) Configuration::get('PS_SHOP_CITY');
+        $hotelAddress = trim($addrLine) !== ''
+            ? trim($addrLine . (trim($cityLine) !== '' ? ', ' . trim($cityLine) : ''))
             : 'Accra, Ghana';
-        $hotelPhone = !empty($hotelRow['phone']) ? (string) $hotelRow['phone'] : (string) Configuration::get('PS_SHOP_PHONE');
+        $hotelPhone = !empty($hotelAddrRow['phone'])
+            ? (string) $hotelAddrRow['phone']
+            : (string) Configuration::get('PS_SHOP_PHONE');
 
         $staffName = isset($this->context->employee)
             ? trim($this->context->employee->firstname . ' ' . $this->context->employee->lastname)
