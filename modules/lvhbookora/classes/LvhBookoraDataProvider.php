@@ -4,7 +4,9 @@
  *
  * Reads live rooms, GHS tariffs, room cover images, hotel interior gallery
  * images, guest testimonials, hotel contact details, and CMS links directly
- * from QloApps 1.8.0 tables with zero core overrides.
+ * from QloApps 1.8.0 tables with zero core overrides. Supplies data for the
+ * Bookora Home 2 homepage, all standalone Bookora webpages, and the
+ * transformed native QloApps pages.
  *
  * @author    Lush View Hotel
  * @copyright 2026 Lush View Hotel
@@ -15,8 +17,26 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+require_once dirname(__FILE__) . '/../LvhBookoraRouteMap.php';
+
 class LvhBookoraDataProvider
 {
+    /**
+     * Read merged Bookora configuration (defaults + stored).
+     *
+     * @return array
+     */
+    public static function getConfig()
+    {
+        $defaults = LvhBookoraRouteMap::configDefaults();
+        $out = array();
+        foreach ($defaults as $k => $v) {
+            $stored = Configuration::get($k);
+            $out[$k] = ($stored !== false && $stored !== '') ? (string) $stored : $v;
+        }
+        return $out;
+    }
+
     /**
      * Build shared header/footer context for all storefront pages.
      *
@@ -82,12 +102,18 @@ class LvhBookoraDataProvider
         }
 
         $searchUrl = $context->link->getCategoryLink($idCategory, null, $idLang);
+        $searchPageUrl = $context->link->getPageLink('search', true, $idLang);
         $homeUrl = $context->link->getPageLink('index', true, $idLang);
         $contactUrl = $context->link->getPageLink('contact', true, $idLang);
         $accountUrl = $context->link->getPageLink('my-account', true, $idLang);
         $loginUrl = $context->link->getPageLink('authentication', true, $idLang);
         $orderProcess = Configuration::get('PS_ORDER_PROCESS_TYPE') ? 'order-opc' : 'order';
         $cartUrl = $context->link->getPageLink($orderProcess, true, $idLang);
+
+        $moduleUrls = array();
+        foreach (LvhBookoraRouteMap::pageControllers() as $ctrl) {
+            $moduleUrls[$ctrl . '_url'] = $context->link->getModuleLink('lvhbookora', $ctrl, array(), null, $idLang);
+        }
 
         $isLogged = isset($context->customer) && $context->customer->isLogged();
         $customerFirst = $isLogged ? trim((string) $context->customer->firstname) : '';
@@ -137,7 +163,7 @@ class LvhBookoraDataProvider
             $pageName = (string) $context->controller->php_self;
         }
 
-        return array(
+        $common = array(
             'hotel_id' => $idHotel,
             'category_id' => $idCategory,
             'hotel_name' => $hotelName,
@@ -151,6 +177,7 @@ class LvhBookoraDataProvider
             'currency_sign' => $currencySign,
             'home_url' => $homeUrl,
             'search_url' => $searchUrl,
+            'search_page_url' => $searchPageUrl,
             'contact_url' => $contactUrl,
             'account_url' => $accountUrl,
             'login_url' => $loginUrl,
@@ -165,11 +192,89 @@ class LvhBookoraDataProvider
             'default_checkin' => date('Y-m-d'),
             'default_checkout' => date('Y-m-d', strtotime('+2 days')),
             'cfg' => $cfg,
+            'module_img' => $context->link->getMediaLink(_MODULE_DIR_ . 'lvhbookora/views/img/'),
+            'map_embed_url' => LvhBookoraRouteMap::mapEmbedUrl(),
+            'map_directions_url' => LvhBookoraRouteMap::mapDirectionsUrl(),
+        );
+
+        return array_merge($common, $moduleUrls);
+    }
+
+    /**
+     * Build full Bookora Home 2 homepage dataset.
+     *
+     * @param Context $context
+     * @param array $common
+     * @return array
+     */
+    public static function getHome2Data(Context $context, array $common)
+    {
+        $idLang = (int) $context->language->id;
+        $idShop = (int) $context->shop->id;
+
+        $interiorImages = self::loadInteriorGallery($context);
+        $heroImage = self::resolveHeroImage($context, $interiorImages);
+        $roomData = self::loadRoomsAndPackages($context, $common, $idLang, $idShop, $interiorImages);
+        $bedrooms = $roomData['bedrooms'];
+        $conferences = $roomData['conferences'];
+
+        $pool = array();
+        foreach ($interiorImages as $img) {
+            $pool[] = $img['url'];
+        }
+        foreach ($bedrooms as $rm) {
+            if (!empty($rm['image'])) {
+                $pool[] = $rm['image'];
+            }
+        }
+        if ($heroImage !== '') {
+            $pool[] = $heroImage;
+        }
+        $pool = array_values(array_unique(array_filter($pool)));
+        $poolCount = count($pool);
+
+        $pickPhoto = function ($idx) use ($pool, $poolCount, $heroImage) {
+            if ($poolCount === 0) {
+                return $heroImage;
+            }
+            return $pool[$idx % $poolCount];
+        };
+
+        // Popular Rooms: 6 cards (4 live bedrooms + live conference packages fill the set)
+        $popular = array();
+        foreach ($bedrooms as $rm) {
+            $popular[] = $rm;
+        }
+        foreach ($conferences as $cf) {
+            $popular[] = $cf;
+        }
+        $popular = array_slice($popular, 0, 6);
+
+        // Featured suites slider uses the live bedrooms
+        $featured = !empty($bedrooms) ? $bedrooms : $popular;
+
+        $testimonials = self::loadTestimonials($context, $idLang);
+        $articles = self::getArticles($context, $common);
+
+        return array(
+            'hero_image' => $common['module_img'] . 'hero-home2.jpg',
+            'hero_image_fallback' => $heroImage,
+            'about_image_1' => $pickPhoto(1),
+            'about_image_2' => $pickPhoto(2),
+            'popular_rooms' => $popular,
+            'services' => self::getServicePanels($common),
+            'featured_suites' => $featured,
+            'facilities' => self::getFacilities(8),
+            'availability_checks' => self::getAvailabilityChecks(),
+            'team' => self::getTeamMembers($common, 4),
+            'testimonials' => $testimonials,
+            'articles' => array_slice($articles, 0, 3),
+            'partners' => self::getPartners(),
         );
     }
 
     /**
-     * Build full homepage dataset for Bookora sections.
+     * Backward-compatible homepage dataset (Home 1 controller reuses this).
      *
      * @param Context $context
      * @param array $common
@@ -177,18 +282,15 @@ class LvhBookoraDataProvider
      */
     public static function getHomeData(Context $context, array $common)
     {
-        $p = _DB_PREFIX_;
         $idLang = (int) $context->language->id;
         $idShop = (int) $context->shop->id;
 
         $interiorImages = self::loadInteriorGallery($context);
         $heroImage = self::resolveHeroImage($context, $interiorImages);
-
         $roomData = self::loadRoomsAndPackages($context, $common, $idLang, $idShop, $interiorImages);
         $bedrooms = $roomData['bedrooms'];
         $conferences = $roomData['conferences'];
 
-        // Pick distinct editorial photos for About, Offers, Plans, and Testimonial backdrop
         $pool = array();
         foreach ($interiorImages as $img) {
             $pool[] = $img['url'];
@@ -247,7 +349,604 @@ class LvhBookoraDataProvider
             'plans' => $plans,
             'testimonials' => $testimonials,
             'gallery' => $gallerySlice,
+            'services' => self::getServicePanels($common),
+            'facilities' => self::getFacilities(8),
+            'team' => self::getTeamMembers($common, 4),
+            'partners' => self::getPartners(),
         );
+    }
+
+    /**
+     * Dataset for a standalone Bookora webpage.
+     *
+     * @param Context $context
+     * @param array $common
+     * @param string $page
+     * @param string $param
+     * @return array
+     */
+    public static function getPageData(Context $context, array $common, $page, $param = '')
+    {
+        $idLang = (int) $context->language->id;
+        $idShop = (int) $context->shop->id;
+        $interiorImages = self::loadInteriorGallery($context);
+        $heroImage = self::resolveHeroImage($context, $interiorImages);
+        $roomData = self::loadRoomsAndPackages($context, $common, $idLang, $idShop, $interiorImages);
+        $bedrooms = $roomData['bedrooms'];
+        $conferences = $roomData['conferences'];
+
+        $pool = array();
+        foreach ($interiorImages as $img) {
+            $pool[] = $img['url'];
+        }
+        foreach ($bedrooms as $rm) {
+            if (!empty($rm['image'])) {
+                $pool[] = $rm['image'];
+            }
+        }
+        $pool = array_values(array_unique(array_filter($pool)));
+        if ($heroImage !== '') {
+            $pool[] = $heroImage;
+        }
+        $pool = array_values(array_unique(array_filter($pool)));
+        $poolCount = count($pool);
+        $pickPhoto = function ($idx) use ($pool, $poolCount, $heroImage) {
+            return $poolCount > 0 ? $pool[$idx % $poolCount] : $heroImage;
+        };
+
+        $allRooms = array_merge($bedrooms, $conferences);
+        $featured = !empty($bedrooms) ? $bedrooms : $allRooms;
+
+        switch ($page) {
+            case 'about':
+                return array(
+                    'bk_page' => array(
+                        'about_image_1' => $pickPhoto(1),
+                        'about_image_2' => $pickPhoto(2),
+                        'counters' => array(
+                            array('num' => '12', 'suffix' => '+', 'label' => 'Years of Experience'),
+                            array('num' => '80', 'suffix' => 'k+', 'label' => 'Happy Guests Hosted'),
+                        ),
+                        'about_facilities' => array_slice(self::getFacilities(8), 0, 4),
+                        'offers' => self::buildSpecialOffers($bedrooms, $conferences, $common, $pickPhoto),
+                        'featured_suites' => $featured,
+                        'facilities' => self::getFacilities(8),
+                    ),
+                );
+
+            case 'service':
+                return array(
+                    'bk_page' => array(
+                        'services' => self::getServiceCards($common),
+                    ),
+                );
+
+            case 'project':
+                $gallery = array();
+                $cats = array('Rooms', 'Suites', 'Dining', 'Events', 'Wellness');
+                $sources = array_merge($interiorImages, array());
+                foreach ($allRooms as $idx => $rm) {
+                    if (!empty($rm['image'])) {
+                        $sources[] = array('url' => $rm['image'], 'caption' => $rm['name']);
+                    }
+                }
+                if (empty($sources)) {
+                    $sources = array(array('url' => $pickPhoto(0), 'caption' => 'Lush View Hotel'));
+                }
+                foreach ($sources as $idx => $src) {
+                    $gallery[] = array(
+                        'url' => $src['url'],
+                        'caption' => !empty($src['caption']) ? $src['caption'] : 'Lush View Hotel Interior',
+                        'category' => $cats[$idx % count($cats)],
+                    );
+                }
+                return array(
+                    'bk_page' => array(
+                        'gallery' => $gallery,
+                        'categories' => $cats,
+                        'showcases' => array_slice($featured, 0, 3),
+                    ),
+                );
+
+            case 'team':
+                return array(
+                    'bk_page' => array(
+                        'team' => self::getTeamMembers($common, 8),
+                    ),
+                );
+
+            case 'testimonial':
+                return array(
+                    'bk_page' => array(
+                        'testimonials' => self::loadTestimonials($context, $idLang),
+                    ),
+                );
+
+            case 'pricing':
+                return array(
+                    'bk_page' => array(
+                        'plans' => self::buildStayPlans($bedrooms, $conferences, $common),
+                    ),
+                );
+
+            case 'blog':
+                return array(
+                    'bk_page' => array(
+                        'articles' => self::getArticles($context, $common),
+                    ),
+                );
+
+            case 'article':
+                $articles = self::getArticles($context, $common);
+                $current = null;
+                foreach ($articles as $a) {
+                    if ($a['slug'] === $param) {
+                        $current = $a;
+                        break;
+                    }
+                }
+                if ($current === null && !empty($articles)) {
+                    $current = $articles[0];
+                }
+                $related = array();
+                if ($current !== null) {
+                    foreach ($articles as $a) {
+                        if ($a['slug'] !== $current['slug']) {
+                            $related[] = $a;
+                        }
+                        if (count($related) >= 3) {
+                            break;
+                        }
+                    }
+                }
+                return array(
+                    'bk_page' => array(
+                        'article' => $current,
+                        'related' => $related,
+                    ),
+                );
+
+            case 'home1':
+                return array('bk_page' => self::getHomeData($context, $common));
+
+            case 'home3':
+                return array(
+                    'bk_page' => array(
+                        'hero_image' => $pickPhoto(0),
+                        'menu' => self::getSpecialtyFoods($common),
+                        'facts' => array(
+                            array('num' => '34', 'suffix' => '+', 'label' => 'Rooms, Suites & Event Spaces'),
+                            array('num' => '80', 'suffix' => 'k+', 'label' => 'Happy Guests Hosted'),
+                            array('num' => '12', 'suffix' => '+', 'label' => 'Years Of Experience'),
+                            array('num' => '24', 'suffix' => '/7', 'label' => 'Concierge & Room Service'),
+                        ),
+                        'featured_suites' => $featured,
+                        'facilities' => self::getFacilities(8),
+                    ),
+                );
+
+            case 'bookmarks':
+                return array(
+                    'bk_page' => array(
+                        'rooms_json' => $allRooms,
+                    ),
+                );
+        }
+
+        return array('bk_page' => array());
+    }
+
+    /**
+     * The 4 interactive Home 2 "Customer Services" panels.
+     *
+     * @param array $common
+     * @return array
+     */
+    public static function getServicePanels(array $common)
+    {
+        $img = $common['module_img'];
+        return array(
+            array(
+                'title' => 'Room Booking',
+                'text' => 'Reserve elegantly appointed rooms and suites in seconds with live availability, instant confirmation, and flexible direct-booking rates.',
+                'image' => $img . 'wellness-concierge.jpg',
+                'url' => $common['search_url'],
+            ),
+            array(
+                'title' => 'Fitness Center',
+                'text' => 'Keep your routine in our fully equipped fitness center with modern cardio and strength stations, open daily for resident guests.',
+                'image' => $img . 'dining-lounge.jpg',
+                'url' => $common['contact_url'],
+            ),
+            array(
+                'title' => '24/7 Room Service',
+                'text' => 'From late-night refreshments to sunrise breakfast in bed, our kitchen and service team are on call around the clock.',
+                'image' => $img . 'conference-banquet.jpg',
+                'url' => $common['contact_url'],
+            ),
+            array(
+                'title' => 'Swimming Pool Access',
+                'text' => 'Unwind beside our serene pool and lounge deck — complimentary for in-house guests, with poolside refreshments all day.',
+                'image' => $img . 'hero-home2.jpg',
+                'url' => $common['contact_url'],
+            ),
+        );
+    }
+
+    /**
+     * The 8-card Service page grid.
+     *
+     * @param array $common
+     * @return array
+     */
+    public static function getServiceCards(array $common)
+    {
+        $panels = self::getServicePanels($common);
+        $extra = array(
+            array(
+                'title' => 'Airport Transfers',
+                'text' => 'Seamless private pick-up and drop-off coordinated with your arrival and departure times.',
+                'image' => $common['module_img'] . 'wellness-concierge.jpg',
+                'url' => $common['contact_url'],
+            ),
+            array(
+                'title' => 'Laundry & Dry Cleaning',
+                'text' => 'Same-day laundry, pressing, and dry cleaning so you always look your best.',
+                'image' => $common['module_img'] . 'dining-lounge.jpg',
+                'url' => $common['contact_url'],
+            ),
+            array(
+                'title' => 'Conference & Events',
+                'text' => 'Flexible halls for up to 60 guests with catering, AV equipment, and dedicated event support.',
+                'image' => $common['module_img'] . 'conference-banquet.jpg',
+                'url' => $common['contact_url'],
+            ),
+            array(
+                'title' => 'Concierge & Tours',
+                'text' => 'Local recommendations, tour arrangements, and ticketing handled by our knowledgeable concierge team.',
+                'image' => $common['module_img'] . 'hero-home2.jpg',
+                'url' => $common['contact_url'],
+            ),
+        );
+        return array_merge($panels, $extra);
+    }
+
+    /**
+     * The 8-item Home 2 Facilities icon grid (exact Bookora labels).
+     *
+     * @param int $count
+     * @return array
+     */
+    public static function getFacilities($count = 8)
+    {
+        $items = array(
+            array('title' => 'Gym Training Grounds', 'icon' => 'gym'),
+            array('title' => 'World-Class Amenities', 'icon' => 'star'),
+            array('title' => 'Stay With Comfort', 'icon' => 'bed'),
+            array('title' => 'Designed For Your Comfort', 'icon' => 'sofa'),
+            array('title' => 'Exclusive Guest Services', 'icon' => 'bell'),
+            array('title' => 'Modern Facilities For You', 'icon' => 'wifi'),
+            array('title' => 'Where Comfort Meets Style', 'icon' => 'gem'),
+            array('title' => 'Enjoy Every Moment', 'icon' => 'glass'),
+        );
+        return array_slice($items, 0, (int) $count);
+    }
+
+    /**
+     * The 4 "Check Availability" checkmarks (exact Bookora labels).
+     *
+     * @return array
+     */
+    public static function getAvailabilityChecks()
+    {
+        return array(
+            '24/7 Concierge Service',
+            'Wellness & Spa Center',
+            'Gourmet On-Site Dining',
+            'Rooftop Pool & Lounge',
+        );
+    }
+
+    /**
+     * Our Expert / team members with portraits and social links.
+     *
+     * @param array $common
+     * @param int $count
+     * @return array
+     */
+    public static function getTeamMembers(array $common, $count = 4)
+    {
+        $img = $common['module_img'];
+        $members = array(
+            array('name' => 'Kwame Mensah', 'role' => 'General Manager', 'image' => $img . 'team-1.jpg', 'mail' => 'gm@lushviewhotel.net'),
+            array('name' => 'Abena Osei', 'role' => 'Head of Guest Relations', 'image' => $img . 'team-2.jpg', 'mail' => 'guestrelations@lushviewhotel.net'),
+            array('name' => 'Kofi Boateng', 'role' => 'Executive Chef', 'image' => $img . 'team-3.jpg', 'mail' => 'chef@lushviewhotel.net'),
+            array('name' => 'Akosua Danquah', 'role' => 'Events & Conference Director', 'image' => $img . 'team-4.jpg', 'mail' => 'events@lushviewhotel.net'),
+            array('name' => 'Yaw Appiah', 'role' => 'Chief Engineer', 'image' => '', 'mail' => 'engineering@lushviewhotel.net'),
+            array('name' => 'Efua Sarpong', 'role' => 'Reservations Manager', 'image' => '', 'mail' => 'reservations@lushviewhotel.net'),
+            array('name' => 'Nii Lartey', 'role' => 'Head of Security', 'image' => '', 'mail' => 'security@lushviewhotel.net'),
+            array('name' => 'Ama Darko', 'role' => 'Wellness & Spa Lead', 'image' => '', 'mail' => 'spa@lushviewhotel.net'),
+        );
+        foreach ($members as $i => $m) {
+            $members[$i]['initials'] = Tools::strtoupper(
+                Tools::substr($m['name'], 0, 1) . Tools::substr(strstr($m['name'], ' '), 1, 1)
+            );
+        }
+        return array_slice($members, 0, (int) $count);
+    }
+
+    /**
+     * Partner / sponsor logo strip (SVG wordmarks).
+     *
+     * @return array
+     */
+    public static function getPartners()
+    {
+        return array(
+            array('name' => 'TripNova', 'tag' => 'Travel Awards'),
+            array('name' => 'Guestly', 'tag' => 'Booking Partner'),
+            array('name' => 'LuxeGuide', 'tag' => 'Hospitality'),
+            array('name' => 'StayScore', 'tag' => 'Rated 9.4'),
+            array('name' => 'TourAfrica', 'tag' => 'Tourism Board'),
+        );
+    }
+
+    /**
+     * Home 3 "Specialties Foods" resort dining menu.
+     *
+     * @param array $common
+     * @return array
+     */
+    public static function getSpecialtyFoods(array $common)
+    {
+        $sign = $common['currency_sign'];
+        return array(
+            array('title' => 'Grilled Tilapia & Kelewele', 'desc' => 'Whole grilled tilapia with spiced plantain, pepper sauce, and garden greens.', 'price' => $sign . '95', 'category' => 'Mains'),
+            array('title' => 'Jollof Rice & Suya Chicken', 'desc' => 'Smoky party jollof with suya-spiced chicken skewers and fried ripe plantain.', 'price' => $sign . '85', 'category' => 'Mains'),
+            array('title' => 'Seafood Platter For Two', 'desc' => 'Prawns, calamari, and lobster tail with lemon butter and herb rice.', 'price' => $sign . '220', 'category' => 'Chef Special'),
+            array('title' => 'Continental Breakfast', 'desc' => 'Eggs to order, artisan bread, tropical fruit, pastries, and freshly brewed coffee.', 'price' => $sign . '60', 'category' => 'Breakfast'),
+            array('title' => 'Signature Mocktail Trio', 'desc' => 'Hibiscus, pineapple-ginger, and cucumber-mint coolers served over crushed ice.', 'price' => $sign . '45', 'category' => 'Drinks'),
+            array('title' => 'Chocolate Lava Cake', 'desc' => 'Warm dark chocolate cake with vanilla bean ice cream and berry coulis.', 'price' => $sign . '40', 'category' => 'Dessert'),
+        );
+    }
+
+    /**
+     * Pricing page stay plans built from the live room catalog.
+     *
+     * @param array $bedrooms
+     * @param array $conferences
+     * @param array $common
+     * @return array
+     */
+    public static function buildStayPlans(array $bedrooms, array $conferences, array $common)
+    {
+        $plans = array();
+        foreach ($bedrooms as $rm) {
+            $plans[] = array(
+                'title' => $rm['name'],
+                'subtitle' => $rm['short_desc'],
+                'price_formatted' => $rm['price_formatted'],
+                'price_exact' => $rm['price_exact'],
+                'period' => '/ Night',
+                'book_url' => $rm['book_url'],
+                'features' => array(
+                    'Spacious air-conditioned room with en-suite bath',
+                    'Plush bedding with daily housekeeping',
+                    'Complimentary high-speed Wi-Fi & smart TV',
+                    '24/7 standby power & secure parking',
+                    'In-room dining and restaurant access',
+                    'Flexible cancellation on direct bookings',
+                ),
+            );
+        }
+        foreach ($conferences as $cf) {
+            $plans[] = array(
+                'title' => $cf['name'],
+                'subtitle' => $cf['short_desc'],
+                'price_formatted' => $cf['price_formatted'],
+                'price_exact' => $cf['price_exact'],
+                'period' => '/ Session',
+                'book_url' => $common['contact_url'],
+                'features' => array(
+                    'Climate-controlled hall for up to 60 delegates',
+                    'HD projection, sound system & flipcharts',
+                    'Dedicated event support & high-speed Wi-Fi',
+                    'Custom boardroom, classroom, or banquet setup',
+                    'Optional tea break & group lunch catering',
+                    'Preferential group bedroom rates for attendees',
+                ),
+            );
+        }
+        return $plans;
+    }
+
+    /**
+     * Editorial blog articles shared across Home 2, /blog and /blog/{slug}.
+     *
+     * @param Context $context
+     * @param array $common
+     * @return array
+     */
+    public static function getArticles(Context $context, array $common)
+    {
+        $img = $common['module_img'];
+        $author = array(
+            'name' => 'Lush View Editorial',
+            'role' => 'Hotel Editorial Team',
+            'bio' => 'The Lush View Hotel editorial team shares travel inspiration, hospitality insights, and guides to help guests get the most from every stay in Ghana.',
+        );
+
+        $raw = array(
+            array(
+                'slug' => 'exploring-scenic-destinations-hotels-with-the-most-amazing-city-and-nature-views',
+                'title' => 'Exploring Scenic Destinations: Hotels with the Most Amazing City and Nature Views',
+                'date' => 'October 18, 2026',
+                'category' => 'Travel',
+                'image' => $img . 'hero-home2.jpg',
+                'excerpt' => 'The best hotel stays begin with a view. From glittering skylines at dusk to tranquil green horizons at dawn, discover how the right setting transforms an ordinary trip into an unforgettable escape.',
+                'tags' => array('Travel', 'City Views', 'Nature', 'Luxury Stays'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'There is a moment every traveler knows — you pull back the curtain, and the destination reveals itself all at once. Whether it is a city skyline glittering after sunset or a stretch of greenery dissolving into morning mist, the view from your room sets the tone for the entire stay.'),
+                    array('type' => 'h', 'text' => 'Where the city meets the horizon'),
+                    array('type' => 'p', 'text' => 'Urban hotels with panoramic glass and elevated suites give guests a living canvas of the city below. At Lush View Hotel, our Executive Rooms and Suites are positioned to capture exactly that balance: close enough to feel the pulse of Accra, yet serene enough to hear yourself think.'),
+                    array('type' => 'quote', 'text' => 'A great hotel does not just give you a room — it gives you a perspective on the place you came to see.'),
+                    array('type' => 'p', 'text' => 'When choosing a hotel for the view, look beyond the photos. Check the floor level of your room category, ask which direction the windows face, and read recent guest reviews that mention light, noise, and scenery.'),
+                    array('type' => 'h', 'text' => 'Nature as an amenity'),
+                    array('type' => 'p', 'text' => 'Gardens, pool decks, and open terraces are more than decorative — they change the pace of a trip. Morning walks through landscaped grounds, breakfast overlooking greenery, and quiet corners for reading all contribute to the restorative side of travel.'),
+                    array('type' => 'p', 'text' => 'The takeaway is simple: choose stays where the surroundings are part of the experience. When your hotel is a destination in itself, every hour of the trip — from sunrise coffee to nightcap — feels considered.'),
+                ),
+            ),
+            array(
+                'slug' => 'the-art-of-hospitality-what-makes-a-hotel-stay-unforgettable',
+                'title' => 'The Art of Hospitality: What Makes a Hotel Stay Unforgettable',
+                'date' => 'October 10, 2026',
+                'category' => 'Hospitality',
+                'image' => $img . 'wellness-concierge.jpg',
+                'excerpt' => 'Luxury is not only thread count and chandeliers. It is the warm greeting at the door, the remembered preference, the seamless check-in. Explore the small details that turn service into hospitality.',
+                'tags' => array('Hospitality', 'Service', 'Guest Experience'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'Ask ten guests to describe their favorite hotel stay and you will rarely hear about square footage. You will hear about people — the receptionist who had the room key ready before they reached the desk, the waiter who remembered how they take their coffee.'),
+                    array('type' => 'h', 'text' => 'Anticipation beats reaction'),
+                    array('type' => 'p', 'text' => 'Great hospitality is quiet and proactive. Extra pillows appear before they are asked for. A taxi is arranged before the meeting ends. These gestures are not accidents; they are the product of training, culture, and teams who genuinely care.'),
+                    array('type' => 'quote', 'text' => 'People will forget what you said, but they will never forget how you made them feel — that is the core of hospitality.'),
+                    array('type' => 'p', 'text' => 'At Lush View Hotel, our teams are trained to listen first. From concierge requests to conference logistics, every interaction is an opportunity to remove friction and add warmth.'),
+                    array('type' => 'h', 'text' => 'Consistency is the true luxury'),
+                    array('type' => 'p', 'text' => 'One spectacular moment is memorable; consistent excellence is what earns trust. Clean rooms, reliable power, prompt service, and honest pricing — night after night — are the foundations guests return for.'),
+                ),
+            ),
+            array(
+                'slug' => 'why-conference-travel-works-better-with-the-right-hotel',
+                'title' => 'Why Conference Travel Works Better With The Right Hotel',
+                'date' => 'September 28, 2026',
+                'category' => 'Events',
+                'image' => $img . 'conference-banquet.jpg',
+                'excerpt' => 'Business travel should sharpen focus, not scatter it. Discover how hosting your conference and your stay under one roof saves time, energy, and budget.',
+                'tags' => array('Conferences', 'Business Travel', 'Events'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'The most productive conferences share a trait: nothing distracts from the agenda. When meeting rooms, guest rooms, dining, and AV support live in one place, delegates spend their energy on the work — not on logistics.'),
+                    array('type' => 'h', 'text' => 'One venue, zero friction'),
+                    array('type' => 'p', 'text' => 'Co-locating accommodation and conference space eliminates transfers, parking hunts, and late arrivals. Organizers get a single point of contact; attendees get the rare luxury of walking from a boardroom to a comfortable bed in minutes.'),
+                    array('type' => 'quote', 'text' => 'The best-run events feel effortless to attendees — because the hard work happened before the first slide loaded.'),
+                    array('type' => 'p', 'text' => 'Our conference packages scale from focused 2-hour sessions to full 24-hour summits for up to 60 delegates, with catering, projection, sound, and high-speed Wi-Fi included or arranged on request.'),
+                    array('type' => 'h', 'text' => 'Budgets that make sense'),
+                    array('type' => 'p', 'text' => 'Bundled delegate rates, on-site catering, and zero transport overhead make hotel-hosted events surprisingly cost-efficient. Add preferential bedroom rates for out-of-town guests and the value compounds.'),
+                ),
+            ),
+            array(
+                'slug' => 'a-food-lovers-guide-to-hotel-dining-in-accra',
+                'title' => 'A Food Lover’s Guide to Hotel Dining in Accra',
+                'date' => 'September 15, 2026',
+                'category' => 'Dining',
+                'image' => $img . 'dining-lounge.jpg',
+                'excerpt' => 'From smoky jollof to elegant continental breakfasts, Accra’s hotel kitchens are rewriting the city’s food map. Here is how to eat well without leaving your hotel.',
+                'tags' => array('Dining', 'Accra', 'Cuisine'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'Accra has always eaten well — but the city’s hotel kitchens have quietly become destinations in their own right. Chefs are blending Ghanaian classics with continental technique, and the results deserve a seat at the table.'),
+                    array('type' => 'h', 'text' => 'Breakfast as a ritual'),
+                    array('type' => 'p', 'text' => 'A good hotel breakfast sets the day: fresh tropical fruit, eggs cooked to order, flaky pastries, and coffee that actually tastes like coffee. It is the easiest luxury of any trip.'),
+                    array('type' => 'quote', 'text' => 'The table is where a hotel’s personality shows most honestly — generous, attentive, and full of flavor.'),
+                    array('type' => 'p', 'text' => 'For dinner, look for kitchens that source locally: grilled tilapia with kelewele, suya-spiced skewers, and seafood platters that taste of the coast. Pair with a house mocktail and the evening writes itself.'),
+                    array('type' => 'h', 'text' => 'In-room dining done right'),
+                    array('type' => 'p', 'text' => 'Room service is not an afterthought at a great hotel. Late arrivals, working lunches, and midnight cravings are all answered with a menu that respects the hour and a kitchen that stays open.'),
+                ),
+            ),
+            array(
+                'slug' => 'wellness-on-the-road-staying-balanced-while-you-travel',
+                'title' => 'Wellness on the Road: Staying Balanced While You Travel',
+                'date' => 'September 2, 2026',
+                'category' => 'Wellness',
+                'image' => $img . 'hero-home2.jpg',
+                'excerpt' => 'Travel disrupts routines — but it does not have to derail them. From quick workouts to poolside recovery, here is how to stay balanced on the move.',
+                'tags' => array('Wellness', 'Fitness', 'Travel Tips'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'Between flights, meetings, and unfamiliar beds, travel can quietly drain your energy. The good news: a few deliberate habits — and the right hotel amenities — keep body and mind in balance.'),
+                    array('type' => 'h', 'text' => 'Move a little, often'),
+                    array('type' => 'p', 'text' => 'Twenty minutes in a well-equipped gym, a swim before breakfast, or a walk through the hotel grounds does more for travel energy than another espresso. Choose stays with real fitness facilities and use them on day one — before excuses arrive.'),
+                    array('type' => 'quote', 'text' => 'Wellness on the road is not about perfection; it is about keeping one or two anchors from home.'),
+                    array('type' => 'p', 'text' => 'Hydration, consistent sleep hours, and lighter evening meals are unglamorous but powerful. Add a poolside hour to decompress and the trip ends with you better than it found you.'),
+                    array('type' => 'h', 'text' => 'Design your stay, not just your schedule'),
+                    array('type' => 'p', 'text' => 'Book a room that supports rest: quiet floors, blackout comfort, and space to breathe. Then protect the calendar around it. The most successful travelers treat recovery as part of the itinerary.'),
+                ),
+            ),
+            array(
+                'slug' => 'planning-the-perfect-weekend-getaway-from-the-city',
+                'title' => 'Planning the Perfect Weekend Getaway From the City',
+                'date' => 'August 20, 2026',
+                'category' => 'Travel',
+                'image' => $img . 'dining-lounge.jpg',
+                'excerpt' => 'You do not need two weeks of leave to reset. A well-planned weekend — with the right hotel, the right pace, and zero logistics — can feel like a full vacation.',
+                'tags' => array('Getaways', 'Weekend', 'Travel Planning'),
+                'body' => array(
+                    array('type' => 'p', 'text' => 'The perfect weekend getaway is an exercise in subtraction: fewer decisions, fewer transfers, fewer things to pack. What remains is time — the one ingredient vacations are supposed to be about.'),
+                    array('type' => 'h', 'text' => 'Choose ease over distance'),
+                    array('type' => 'p', 'text' => 'A great getaway hotel is close enough to reach without exhaustion, and complete enough that you never need to leave. Pool, restaurant, spa, and comfortable beds cover ninety percent of what a weekend should be.'),
+                    array('type' => 'quote', 'text' => 'A weekend well spent gives you back a week of energy.'),
+                    array('type' => 'p', 'text' => 'Plan one anchor activity — a dinner reservation, a massage, a city tour — and let the rest unfold. The best weekends have a rhythm, not a checklist.'),
+                    array('type' => 'h', 'text' => 'Pack light, arrive early'),
+                    array('type' => 'p', 'text' => 'A small bag, an early check-in request, and a flexible Sunday checkout turn forty-eight hours into something that feels much longer. Monday arrives, and you are genuinely ready for it.'),
+                ),
+            ),
+        );
+
+        foreach ($raw as $i => $a) {
+            $raw[$i]['author'] = $author;
+            $raw[$i]['url'] = $context->link->getModuleLink('lvhbookora', 'article', array('slug' => $a['slug']));
+        }
+        return $raw;
+    }
+
+    /**
+     * Persist a guest review / blog comment / contact-style feedback entry.
+     *
+     * @param string $type review|comment
+     * @param array $payload
+     * @return bool
+     */
+    public static function storeFeedback($type, array $payload)
+    {
+        $key = 'LVH_BK_FEEDBACK';
+        $existing = array();
+        $raw = (string) Configuration::get($key);
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $existing = $decoded;
+            }
+        }
+        $payload['type'] = (string) $type;
+        $payload['date'] = date('Y-m-d H:i:s');
+        $existing[] = $payload;
+        if (count($existing) > 60) {
+            $existing = array_slice($existing, -60);
+        }
+        return Configuration::updateValue($key, json_encode($existing));
+    }
+
+    /**
+     * Persist a newsletter subscriber (validated by caller).
+     *
+     * @param string $email
+     * @return bool
+     */
+    public static function storeSubscriber($email)
+    {
+        $key = 'LVH_BK_SUBSCRIBERS';
+        $existing = array();
+        $raw = (string) Configuration::get($key);
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $existing = $decoded;
+            }
+        }
+        $email = Tools::strtolower(trim((string) $email));
+        if (!in_array($email, $existing)) {
+            $existing[] = $email;
+        }
+        if (count($existing) > 500) {
+            $existing = array_slice($existing, -500);
+        }
+        return Configuration::updateValue($key, json_encode($existing));
     }
 
     /**
@@ -334,7 +1033,7 @@ class LvhBookoraDataProvider
     }
 
     /**
-     * Load active bedroom room types and conference room types with real cover photos & GHS tariffs.
+     * Load active room types with real cover photos & GHS tariffs.
      *
      * @param Context $context
      * @param array $common
@@ -388,6 +1087,7 @@ class LvhBookoraDataProvider
 
                 $maxGuests = max(1, (int) $r['max_guests']);
                 $maxAdults = max(1, (int) $r['max_adults']);
+                $maxChildren = max(0, (int) $r['max_children']);
                 $shortDesc = trim(preg_replace('/\s+/', ' ', strip_tags((string) $r['description_short'])));
                 if ($shortDesc === '') {
                     $shortDesc = 'Elegantly appointed accommodation featuring climate control, plush bedding, high-speed Wi-Fi, and private en-suite bath.';
@@ -412,8 +1112,10 @@ class LvhBookoraDataProvider
                     'image' => $imgUrl,
                     'max_guests' => $maxGuests,
                     'max_adults' => $maxAdults,
-                    'beds_label' => ($price >= 850 ? '1 King Suite Bed' : ($price >= 650 ? '1 King Bed' : '1 Queen / Double Bed')),
-                    'bath_label' => '1 En-Suite Bath',
+                    'max_children' => $maxChildren,
+                    'persons_label' => $maxGuests . ' Persons',
+                    'beds_label' => ($price >= 850 ? '3 Beds' : ($price >= 650 ? '2 Beds' : '1 Bed')),
+                    'bath_label' => '1 Bath',
                     'short_desc' => Tools::substr($shortDesc, 0, 145),
                     'product_url' => $productUrl,
                     'book_url' => $bookUrl,
@@ -433,7 +1135,7 @@ class LvhBookoraDataProvider
     }
 
     /**
-     * Build the 4 interactive Bookora "Special Offers" rows using real GHS room & conference tiers.
+     * Build the 4 interactive "Special Offers" rows using live GHS tiers.
      *
      * @param array $bedrooms
      * @param array $conferences
@@ -541,7 +1243,7 @@ class LvhBookoraDataProvider
     }
 
     /**
-     * Build the two side-by-side Bookora Stay Plan cards from live room catalog.
+     * Build the two side-by-side Stay Plan cards from the live room catalog.
      *
      * @param array $bedrooms
      * @param array $common

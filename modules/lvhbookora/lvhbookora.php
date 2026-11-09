@@ -2,12 +2,17 @@
 /**
  * Lush View Hotel - Bookora Luxury Storefront Theme Module for QloApps 1.8.0.
  *
- * Replaces the stock QloApps storefront appearance with the Bookora Luxury
- * Hotel aesthetic (editorial serif typography, deep forest teal & warm gold
- * palette, frosted-glass availability search bar, dark facilities showcase,
- * live GHS room carousel, interactive offers, pricing plans, guest reviews,
- * interior gallery lightbox, and luxury dark footer) while keeping 100% of
- * QloApps 1.8.0 booking, cart, checkout, and Lush View Ops intact.
+ * Exact Bookora "Home 2" luxury hotel storefront (https://themexriver.com/wp/bookora/home-2/)
+ * for Lush View Hotel: glassmorphic Header 2 with dropdown navigation, dark
+ * full-bleed hero, Popular Rooms grid, interactive Customer Services panels,
+ * Featured Suites slider, 8-item Facilities grid, Check Availability booking
+ * form, Our Expert team, testimonial slider, Trending Topics blog cards,
+ * partner strip, Footer 2 with embedded map & working newsletter — plus every
+ * standalone Bookora webpage (About, Service, Project, Team, Testimonial,
+ * Pricing, Blog, Blog Article, Home 1, Home 3, Bookmarks) and Bookora-styled
+ * native QloApps pages (All Listings, Room Detail, Contact, Sign In, My
+ * Account, Cart & Checkout, CMS) — all while keeping 100% of QloApps 1.8.0
+ * booking, cart, checkout, inventory, and Back Office intact.
  *
  * NOTICE OF LICENSE
  *
@@ -24,6 +29,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+require_once dirname(__FILE__) . '/classes/LvhBookoraRouteMap.php';
 require_once dirname(__FILE__) . '/classes/LvhBookoraDataProvider.php';
 
 class LvhBookora extends Module
@@ -35,7 +41,7 @@ class LvhBookora extends Module
     {
         $this->name = 'lvhbookora';
         $this->tab = 'front_office_features';
-        $this->version = '1.0.0';
+        $this->version = '2.0.0';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -43,7 +49,7 @@ class LvhBookora extends Module
         parent::__construct();
 
         $this->displayName = $this->l('LVH Bookora Luxury Storefront Theme');
-        $this->description = $this->l('Bookora luxury hotel storefront design for Lush View Hotel — live QloApps 1.8.0 availability search, GHS room showcase, facilities, offers, gallery & inner-page styling.');
+        $this->description = $this->l('Exact Bookora Home 2 luxury hotel storefront for Lush View Hotel — glassmorphic header, Home 2 hero & sections, all Bookora webpages (About, Service, Project, Team, Testimonial, Pricing, Blog, Home 1/3, Bookmarks), Bookora-styled listings/room detail/contact/account pages, live QloApps 1.8.0 GHS booking & inventory.');
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
     }
 
@@ -54,21 +60,7 @@ class LvhBookora extends Module
      */
     public static function getDefaults()
     {
-        return array(
-            'LVH_BK_ENABLED' => '1',
-            'LVH_BK_EYEBROW' => 'Welcome To Lush View Hotel',
-            'LVH_BK_HERO_LINE1' => 'Luxury Stay Hotel Experience',
-            'LVH_BK_HERO_LINE2' => 'Comfort & Elegance',
-            'LVH_BK_HERO_SUB' => 'Experience world-class Ghanaian hospitality where luxury, serene views, and timeless comfort come together for an unforgettable stay.',
-            'LVH_BK_ABOUT_TITLE' => 'Experience a world of refined comfort & timeless elegance, where warm hospitality greets every guest.',
-            'LVH_BK_ABOUT_BODY' => 'Nestled in a tranquil setting with effortless access to the city, Lush View Hotel blends contemporary luxury with attentive personal service—crafted for discerning business leaders, conference delegates, and leisure travelers.',
-            'LVH_BK_STAT1_NUM' => '94%',
-            'LVH_BK_STAT1_LABEL' => 'Our guests are repeat & referred visitors',
-            'LVH_BK_STAT2_NUM' => '34+',
-            'LVH_BK_STAT2_LABEL' => 'Luxury bedrooms, suites & event hall',
-            'LVH_BK_COLOR_TEAL' => '#0b3b36',
-            'LVH_BK_COLOR_GOLD' => '#c2a275',
-        );
+        return LvhBookoraRouteMap::configDefaults();
     }
 
     public function install()
@@ -84,8 +76,14 @@ class LvhBookora extends Module
             && $this->registerHook('displayHeader')
             && $this->registerHook('displayBanner')
             && $this->registerHook('displayHome')
-            && $this->registerHook('displayFooterBefore');
+            && $this->registerHook('displayTopColumn')
+            && $this->registerHook('displayRoomTypeDetailRoomTypeNameBlock')
+            && $this->registerHook('displayColumnsBottom')
+            && $this->registerHook('displayAfterHotelBranchInformation')
+            && $this->registerHook('displayFooterBefore')
+            && $this->registerHook('moduleRoutes');
 
+        $this->refreshRewrites();
         $this->flushThemeCaches();
         return $ok;
     }
@@ -100,6 +98,7 @@ class LvhBookora extends Module
     public function enable($force_all = false)
     {
         $ok = parent::enable($force_all);
+        $this->refreshRewrites();
         $this->flushThemeCaches();
         return $ok;
     }
@@ -109,6 +108,40 @@ class LvhBookora extends Module
         $ok = parent::disable($force_all);
         $this->flushThemeCaches();
         return $ok;
+    }
+
+    /**
+     * Register any hook added after the first install (idempotent).
+     */
+    public function registerMissingHooks()
+    {
+        $hooks = array(
+            'actionFrontControllerSetMedia',
+            'displayHeader',
+            'displayBanner',
+            'displayHome',
+            'displayTopColumn',
+            'displayRoomTypeDetailRoomTypeNameBlock',
+            'displayColumnsBottom',
+            'displayAfterHotelBranchInformation',
+            'displayFooterBefore',
+            'moduleRoutes',
+        );
+        foreach ($hooks as $hook) {
+            if (!$this->isRegisteredInHook($hook)) {
+                $this->registerHook($hook);
+            }
+        }
+    }
+
+    /**
+     * Regenerate `.htaccess` so `module-lvhbookora-*` friendly URLs resolve.
+     */
+    protected function refreshRewrites()
+    {
+        if (method_exists('Tools', 'generateHtaccess')) {
+            Tools::generateHtaccess();
+        }
     }
 
     /**
@@ -122,22 +155,6 @@ class LvhBookora extends Module
         if (method_exists('Media', 'clearCache')) {
             Media::clearCache();
         }
-    }
-
-    /**
-     * Read current configuration merged over defaults.
-     *
-     * @return array
-     */
-    protected function getBookoraConfig()
-    {
-        $defaults = self::getDefaults();
-        $out = array();
-        foreach ($defaults as $k => $v) {
-            $stored = Configuration::get($k);
-            $out[$k] = ($stored !== false && $stored !== '') ? (string) $stored : $v;
-        }
-        return $out;
     }
 
     /**
@@ -161,10 +178,20 @@ class LvhBookora extends Module
         if ($this->commonCache === null) {
             $this->commonCache = LvhBookoraDataProvider::getCommonData(
                 $this->context,
-                $this->getBookoraConfig()
+                LvhBookoraDataProvider::getConfig()
             );
         }
         return $this->commonCache;
+    }
+
+    /**
+     * Friendly URL rules for every standalone Bookora webpage.
+     *
+     * @return array
+     */
+    public function hookModuleRoutes($params)
+    {
+        return LvhBookoraRouteMap::routes();
     }
 
     /**
@@ -176,11 +203,13 @@ class LvhBookora extends Module
             return;
         }
         $this->context->controller->addCSS($this->_path . 'views/css/bookora.css', 'all');
+        $this->context->controller->addCSS($this->_path . 'views/css/bookora-v2.css', 'all');
         $this->context->controller->addJS($this->_path . 'views/js/bookora.js');
     }
 
     /**
-     * Inject Google Fonts (`Cormorant Garamond` + `Plus Jakarta Sans`) and dynamic CSS variables.
+     * Inject Google Fonts (`Cormorant Garamond` + `Plus Jakarta Sans`), dynamic
+     * CSS variables, and shared JS definitions.
      *
      * @return string
      */
@@ -190,14 +219,34 @@ class LvhBookora extends Module
             return '';
         }
 
-        $cfg = $this->getBookoraConfig();
-        $teal = preg_match('/^#[0-9a-fA-F]{6}$/', $cfg['LVH_BK_COLOR_TEAL']) ? $cfg['LVH_BK_COLOR_TEAL'] : '#0b3b36';
-        $gold = preg_match('/^#[0-9a-fA-F]{6}$/', $cfg['LVH_BK_COLOR_GOLD']) ? $cfg['LVH_BK_COLOR_GOLD'] : '#c2a275';
+        $cfg = LvhBookoraDataProvider::getConfig();
+        $teal = preg_match('/^#[0-9a-fA-F]{6}$/', $cfg['LVH_BK_COLOR_TEAL']) ? $cfg['LVH_BK_COLOR_TEAL'] : '#14110d';
+        $gold = preg_match('/^#[0-9a-fA-F]{6}$/', $cfg['LVH_BK_COLOR_GOLD']) ? $cfg['LVH_BK_COLOR_GOLD'] : '#c9a063';
 
         $common = $this->getSharedCommon();
+
+        // Bookmarks seed: every live room type as compact JSON for localStorage-backed bookmarks
+        $bookmarksSeed = array();
+        $roomSets = LvhBookoraDataProvider::getPageData($this->context, $common, 'bookmarks');
+        if (!empty($roomSets['bk_page']['rooms_json'])) {
+            foreach ($roomSets['bk_page']['rooms_json'] as $rm) {
+                $bookmarksSeed[] = array(
+                    'id' => (int) $rm['id_product'],
+                    'name' => (string) $rm['name'],
+                    'url' => (string) $rm['product_url'],
+                    'price' => (string) $rm['price_formatted'],
+                    'currency' => (string) $common['currency_sign'],
+                    'image' => (string) $rm['image'],
+                );
+            }
+        }
+
         Media::addJsDef(array(
             'lvhBookoraSearchUrl' => $common['search_url'],
             'lvhBookoraUseOccupancy' => (int) $common['use_occupancy_param'],
+            'lvhBookoraImg' => $common['module_img'],
+            'lvhBookoraBookmarksSeed' => $bookmarksSeed,
+            'lvhBookoraFeedback' => (string) Tools::getValue('bk_feedback', ''),
         ));
 
         return '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n"
@@ -207,7 +256,7 @@ class LvhBookora extends Module
     }
 
     /**
-     * Render Bookora Top Utility Bar + Sticky Main Navbar across all storefront pages.
+     * Render Bookora Header 2 (glassmorphic nav + dropdowns) + breadcrumb page hero.
      *
      * @return string
      */
@@ -217,15 +266,73 @@ class LvhBookora extends Module
             return '';
         }
 
+        $common = $this->getSharedCommon();
+
+        // Recent posts for the Header 2 "Blog" dropdown
+        $recent = array();
+        foreach (array_slice(LvhBookoraDataProvider::getArticles($this->context, $common), 0, 3) as $a) {
+            $recent[] = array('title' => $a['title'], 'url' => $a['url'], 'date' => $a['date']);
+        }
+
         $this->context->smarty->assign(array(
-            'bk' => $this->getSharedCommon(),
+            'bk' => $common,
+            'bk_hero' => $this->resolvePageHero(),
+            'bk_recent_posts' => $recent,
         ));
 
         return $this->display(__FILE__, 'views/templates/hook/bookora-header.tpl');
     }
 
     /**
-     * Render full 10-section Bookora Homepage on `index`.
+     * Determine the breadcrumb hero for the current page (null when the page
+     * renders its own hero — Home 1 / Home 3 — or no hero is needed).
+     *
+     * @return array|null
+     */
+    protected function resolvePageHero()
+    {
+        $ctrl = $this->context->controller;
+
+        // Bookora module controllers declare their own page identity
+        if (isset($ctrl->lvhPage) && $ctrl->lvhPage !== '') {
+            if (!empty($ctrl->lvhNoHero)) {
+                return null;
+            }
+            $titles = LvhBookoraRouteMap::moduleHeroTitles();
+            $title = isset($titles[$ctrl->lvhPage]) ? $titles[$ctrl->lvhPage] : 'Lush View Hotel';
+            if ($ctrl->lvhPage === 'article' && !empty($ctrl->lvhArticleTitle)) {
+                $title = (string) $ctrl->lvhArticleTitle;
+            }
+            $parent = ($ctrl->lvhPage === 'article') ? 'Blog' : $title;
+            return array('title' => $title, 'crumb' => $parent);
+        }
+
+        $pageName = isset($ctrl->php_self) ? (string) $ctrl->php_self : '';
+        if ($pageName === '' || $pageName === 'index') {
+            return null;
+        }
+
+        $titles = LvhBookoraRouteMap::nativeHeroTitles();
+        $title = isset($titles[$pageName]) ? $titles[$pageName] : 'Lush View Hotel';
+
+        // Room detail hero shows the live room type name when available
+        if ($pageName === 'product' && isset($ctrl->product) && is_object($ctrl->product)) {
+            $name = '';
+            if (isset($ctrl->product->name)) {
+                $name = is_array($ctrl->product->name)
+                    ? (isset($ctrl->product->name[$this->context->language->id]) ? $ctrl->product->name[$this->context->language->id] : reset($ctrl->product->name))
+                    : (string) $ctrl->product->name;
+            }
+            if ($name !== '') {
+                $title = $name;
+            }
+        }
+
+        return array('title' => $title, 'crumb' => $title);
+    }
+
+    /**
+     * Render full Bookora Home 2 homepage on `index`.
      *
      * @return string
      */
@@ -236,7 +343,7 @@ class LvhBookora extends Module
         }
 
         $common = $this->getSharedCommon();
-        $home = LvhBookoraDataProvider::getHomeData($this->context, $common);
+        $home = LvhBookoraDataProvider::getHome2Data($this->context, $common);
 
         $this->context->smarty->assign(array(
             'bk' => $common,
@@ -247,7 +354,170 @@ class LvhBookora extends Module
     }
 
     /**
-     * Render Bookora Gold Ribbon + 4-Column Dark Footer + Lightbox Modal across all storefront pages.
+     * Bookora filter bar on All Listings / Search Result (`category` page).
+     *
+     * @return string
+     */
+    public function hookDisplayTopColumn($params)
+    {
+        if (!$this->isBookoraActive()) {
+            return '';
+        }
+
+        // Only the All Listings / Search Result pages get the Bookora filter bar
+        $pageName = isset($this->context->controller->php_self) ? (string) $this->context->controller->php_self : '';
+        if (!in_array($pageName, array('category', 'search', 'our-properties'), true)) {
+            return '';
+        }
+
+        $ctrl = $this->context->controller;
+        $sortOptions = array(
+            '' => 'Sort By',
+            'price:asc' => 'Price: Low to High',
+            'price:desc' => 'Price: High to Low',
+            'name:asc' => 'Name: A to Z',
+            'name:desc' => 'Name: Z to A',
+            'date:desc' => 'Newest First',
+            'date:asc' => 'Oldest First',
+            'position:asc' => 'Position: First to Last',
+            'position:desc' => 'Position: Last to First',
+        );
+
+        $this->context->smarty->assign(array(
+            'bk' => $this->getSharedCommon(),
+            'bk_sort_options' => $sortOptions,
+            'bk_current_sort' => (string) Tools::getValue('orderby', ''),
+            'bk_search_keywords' => (string) Tools::getValue('search_query', Tools::getValue('s', '')),
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/bookora-filters.tpl');
+    }
+
+    /**
+     * Bookora room detail top block (`Go Back`, `Bookmark`, `Share`, `Report`).
+     *
+     * @return string
+     */
+    public function hookDisplayRoomTypeDetailRoomTypeNameBlock($params)
+    {
+        if (!$this->isBookoraActive()) {
+            return '';
+        }
+
+        $room = $this->getRoomDetailContext();
+        $this->context->smarty->assign(array(
+            'bk' => $this->getSharedCommon(),
+            'bk_room' => $room,
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/bookora-room-top.tpl');
+    }
+
+    /**
+     * Bookora room detail bottom block (Beds/Bath/Guest cards, map, reviews).
+     *
+     * @return string
+     */
+    public function hookDisplayColumnsBottom($params)
+    {
+        if (!$this->isBookoraActive()) {
+            return '';
+        }
+
+        // This hook renders site-wide from footer.tpl — only decorate room detail
+        $pageName = isset($this->context->controller->php_self) ? (string) $this->context->controller->php_self : '';
+        if ($pageName !== 'product') {
+            return '';
+        }
+
+        $room = $this->getRoomDetailContext();
+        $this->context->smarty->assign(array(
+            'bk' => $this->getSharedCommon(),
+            'bk_room' => $room,
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/bookora-room-bottom.tpl');
+    }
+
+    /**
+     * Bookora contact cards + embedded map on the native Contact page.
+     *
+     * @return string
+     */
+    public function hookDisplayAfterHotelBranchInformation($params)
+    {
+        if (!$this->isBookoraActive()) {
+            return '';
+        }
+
+        $this->context->smarty->assign(array(
+            'bk' => $this->getSharedCommon(),
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/bookora-contact-extra.tpl');
+    }
+
+    /**
+     * Room detail helpers shared by the two product-page hooks.
+     *
+     * @return array
+     */
+    protected function getRoomDetailContext()
+    {
+        $ctrl = $this->context->controller;
+        $common = $this->getSharedCommon();
+        $room = array(
+            'name' => 'Room Details',
+            'id_product' => 0,
+            'price' => '',
+            'max_adults' => 2,
+            'max_children' => 0,
+            'max_guests' => 2,
+            'beds_label' => '1 Bed',
+            'bath_label' => '1 Bath',
+            'persons_label' => '2 Persons',
+        );
+
+        if (isset($ctrl->product) && is_object($ctrl->product)) {
+            $idProduct = isset($ctrl->product->id) ? (int) $ctrl->product->id : 0;
+            $room['id_product'] = $idProduct;
+
+            if (isset($ctrl->product->name)) {
+                $room['name'] = is_array($ctrl->product->name)
+                    ? (isset($ctrl->product->name[$this->context->language->id]) ? $ctrl->product->name[$this->context->language->id] : reset($ctrl->product->name))
+                    : (string) $ctrl->product->name;
+            }
+
+            if ($idProduct > 0) {
+                $rtRow = Db::getInstance()->getRow(
+                    'SELECT `max_adults`, `max_children`, `max_guests`
+                     FROM `' . _DB_PREFIX_ . 'htl_room_type`
+                     WHERE `id_product` = ' . $idProduct
+                );
+                if (is_array($rtRow)) {
+                    $room['max_adults'] = max(1, (int) $rtRow['max_adults']);
+                    $room['max_children'] = max(0, (int) $rtRow['max_children']);
+                    $room['max_guests'] = max(1, (int) $rtRow['max_guests']);
+                }
+
+                $price = 0.0;
+                if (method_exists('Product', 'getPriceStatic')) {
+                    $price = (float) Product::getPriceStatic($idProduct, true);
+                }
+                if ($price > 0) {
+                    $room['price'] = $common['currency_sign'] . number_format($price, 2) . ' / Night';
+                }
+
+                $room['persons_label'] = $room['max_guests'] . ' Persons';
+                $room['beds_label'] = ($price >= 850 ? '3 Beds' : ($price >= 650 ? '2 Beds' : '1 Bed'));
+            }
+        }
+
+        return $room;
+    }
+
+    /**
+     * Render Bookora partner strip + Footer 2 + floating [TOP] button + modals.
      *
      * @return string
      */
@@ -257,9 +527,11 @@ class LvhBookora extends Module
             return '';
         }
 
+        $common = $this->getSharedCommon();
         $this->context->smarty->assign(array(
-            'bk' => $this->getSharedCommon(),
+            'bk' => $common,
             'bk_year' => date('Y'),
+            'bk_partners' => LvhBookoraDataProvider::getPartners(),
         ));
 
         return $this->display(__FILE__, 'views/templates/hook/bookora-footer.tpl');
@@ -352,35 +624,35 @@ class LvhBookora extends Module
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Left Stat Value'),
+                        'label' => $this->l('About Stat Value'),
                         'name' => 'LVH_BK_STAT1_NUM',
                         'class' => 'fixed-width-md',
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Left Stat Caption'),
+                        'label' => $this->l('About Stat Caption'),
                         'name' => 'LVH_BK_STAT1_LABEL',
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Middle Stat Value'),
+                        'label' => $this->l('Secondary Stat Value'),
                         'name' => 'LVH_BK_STAT2_NUM',
                         'class' => 'fixed-width-md',
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Middle Stat Caption'),
+                        'label' => $this->l('Secondary Stat Caption'),
                         'name' => 'LVH_BK_STAT2_LABEL',
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Primary Forest Teal (#hex)'),
+                        'label' => $this->l('Primary Dark Ink (#hex)'),
                         'name' => 'LVH_BK_COLOR_TEAL',
                         'class' => 'fixed-width-md',
                     ),
                     array(
                         'type' => 'text',
-                        'label' => $this->l('Primary Champagne Gold (#hex)'),
+                        'label' => $this->l('Primary Warm Gold (#hex)'),
                         'name' => 'LVH_BK_COLOR_GOLD',
                         'class' => 'fixed-width-md',
                     ),
@@ -410,7 +682,7 @@ class LvhBookora extends Module
         $helper->allow_employee_form_lang = (int) Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG');
         $helper->title = $this->displayName;
         $helper->show_toolbar = false;
-        $helper->fields_value = $this->getBookoraConfig();
+        $helper->fields_value = LvhBookoraDataProvider::getConfig();
 
         return $helper->generateForm(array($fieldsForm));
     }
