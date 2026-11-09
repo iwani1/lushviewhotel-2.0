@@ -1,21 +1,10 @@
 /**
- * Lush View Hotel - Bookora v2 storefront interactions.
+ * Lush View Hotel — Bookora Storefront Interactive Controller (QloApps 1.8.0)
  *
- * Header 2 sticky glassmorphism, dropdown/mobile drawer, floating [TOP],
- * Home 2 service-panel crossfade, Featured Suites slider, testimonial slider,
- * availability booking form builder (live QloApps search), localStorage
- * bookmarks (+ /bookmarks page), share links + copy toast, Report modal,
- * project gallery filter + lightbox, listing filter bar (grid/list/map,
- * price filter, sort), count-up counters, and QloApps AJAX cart protection.
- *
- * @author    Lush View Hotel
- * @copyright 2026 Lush View Hotel
- * @license   http://opensource.org/licenses/afl-3.0.php Academic Free License (AFL 3.0)
+ * Semicolon-disciplined ES5 for safe JShrink minification under QloApps CCC.
  */
 (function () {
     'use strict';
-
-    var BOOKMARKS_KEY = 'lvhbk_bookmarks_v1';
 
     function onReady(fn) {
         if (document.readyState === 'loading') {
@@ -25,835 +14,429 @@
         }
     }
 
-    function qs(sel, root) {
-        return (root || document).querySelector(sel);
-    }
+    onReady(function () {
+        preserveAjaxCartModal();
+        initStickyHeader();
+        initMobileDrawer();
+        initAvailabilityForm();
+        initRoomsSlider();
+        initOffersSwitcher();
+        initTestimonialsSlider();
+        initServicePanels();
+        initLightbox();
+    });
 
-    function qsa(sel, root) {
-        return Array.prototype.slice.call((root || document).querySelectorAll(sel));
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* QloApps AJAX cart preservation (layer_cart must live on body)       */
-    /* ------------------------------------------------------------------ */
+    /**
+     * Move QloApps #layer_cart out of #header into <body> so AJAX "Book Now"
+     * popups render cleanly while legacy #header children are hidden, and keep
+     * the Bookora cart counter synced with QloApps ajaxCart.
+     */
     function preserveAjaxCartModal() {
-        var layerCart = qs('#header #layer_cart');
-        var layerOverlay = qs('#header .layer_cart_overlay');
-        if (layerCart && layerCart.parentNode !== document.body) {
-            document.body.appendChild(layerCart);
-        }
+        var layerCart = document.querySelector('#header #layer_cart');
+        var layerOverlay = document.querySelector('#header .layer_cart_overlay');
         if (layerOverlay && layerOverlay.parentNode !== document.body) {
             document.body.appendChild(layerOverlay);
         }
-
-        var qloQty = qs('.shopping_cart .ajax_cart_quantity');
-        var badge = qs('#bk-cart-count');
-        if (qloQty && badge) {
-            var syncQty = function () {
-                badge.textContent = (qloQty.textContent || '0').replace(/\D/g, '') || '0';
-            };
-            syncQty();
-            if (window.MutationObserver) {
-                new MutationObserver(syncQty).observe(qloQty, { childList: true, characterData: true, subtree: true });
-            }
+        if (layerCart && layerCart.parentNode !== document.body) {
+            document.body.appendChild(layerCart);
         }
-    }
 
-    /* ------------------------------------------------------------------ */
-    /* Header 2: sticky glass nav + mobile drawer                          */
-    /* ------------------------------------------------------------------ */
-    function initStickyHeader() {
-        var nav = qs('#bk-navbar');
-        if (!nav) {
+        var badge = document.getElementById('bk-cart-count');
+        var qloQty = document.querySelector('.shopping_cart .ajax_cart_quantity');
+        if (!badge || !qloQty) {
             return;
         }
-        var updateSticky = function () {
-            nav.classList.toggle('is-fixed', (window.pageYOffset || document.documentElement.scrollTop) > 90);
+
+        var syncQty = function () {
+            var raw = parseInt((qloQty.textContent || '0').trim(), 10);
+            badge.textContent = isNaN(raw) ? '0' : String(raw);
         };
-        updateSticky();
-        window.addEventListener('scroll', updateSticky, { passive: true });
+
+        if (typeof MutationObserver !== 'undefined') {
+            var obs = new MutationObserver(syncQty);
+            obs.observe(qloQty, { childList: true, characterData: true, subtree: true });
+        }
+        if (typeof window.jQuery !== 'undefined') {
+            window.jQuery(document).ajaxComplete(syncQty);
+        }
     }
 
+    /**
+     * Sticky Bookora navigation bar past the 42px top utility bar.
+     */
+    function initStickyHeader() {
+        var shell = document.getElementById('bk-header-shell');
+        var navbar = document.getElementById('bk-navbar');
+        if (!shell || !navbar) {
+            return;
+        }
+
+        var updateSticky = function () {
+            var threshold = 42;
+            if (window.pageYOffset > threshold) {
+                if (!navbar.classList.contains('is-fixed')) {
+                    shell.style.paddingBottom = navbar.offsetHeight + 'px';
+                    navbar.classList.add('is-fixed');
+                }
+            } else if (navbar.classList.contains('is-fixed')) {
+                navbar.classList.remove('is-fixed');
+                shell.style.paddingBottom = '0px';
+            }
+        };
+
+        window.addEventListener('scroll', updateSticky, { passive: true });
+        updateSticky();
+    }
+
+    /**
+     * Mobile navigation drawer open/close handlers.
+     */
     function initMobileDrawer() {
-        var btn = qs('#bk-mobile-toggle');
-        var drawer = qs('#bk-mobile-drawer');
+        var btn = document.getElementById('bk-mobile-toggle');
+        var drawer = document.getElementById('bk-mobile-drawer');
         if (!btn || !drawer) {
             return;
         }
+
         var openDrawer = function () {
             drawer.classList.add('is-open');
             drawer.setAttribute('aria-hidden', 'false');
             btn.setAttribute('aria-expanded', 'true');
         };
+
         var closeDrawer = function () {
             drawer.classList.remove('is-open');
             drawer.setAttribute('aria-hidden', 'true');
             btn.setAttribute('aria-expanded', 'false');
         };
+
         btn.addEventListener('click', openDrawer);
-        qsa('[data-bk-close-drawer]', drawer).forEach(function (el) {
-            el.addEventListener('click', closeDrawer);
-        });
+
+        var closers = drawer.querySelectorAll('[data-bk-close-drawer]');
+        for (var i = 0; i < closers.length; i++) {
+            closers[i].addEventListener('click', closeDrawer);
+        }
+
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
+            if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
                 closeDrawer();
             }
         });
     }
 
-    /* ------------------------------------------------------------------ */
-    /* Floating [TOP] button                                              */
-    /* ------------------------------------------------------------------ */
-    function initTopButton() {
-        var btn = qs('#bk-top-btn');
-        if (!btn) {
-            return;
-        }
-        var update = function () {
-            btn.classList.toggle('is-visible', (window.pageYOffset || document.documentElement.scrollTop) > 420);
-        };
-        update();
-        window.addEventListener('scroll', update, { passive: true });
-        btn.addEventListener('click', function () {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Availability booking form -> live QloApps search URL                */
-    /* ------------------------------------------------------------------ */
+    /**
+     * Availability search pill: enforces check_out > check_in and redirects
+     * to QloApps 1.8.0's exact room-search URL with occupancy parameters.
+     */
     function initAvailabilityForm() {
-        var form = qs('#bk-availability-form');
-        if (!form) {
+        var form = document.getElementById('bk-availability-form');
+        var inInput = document.getElementById('bk-checkin');
+        var outInput = document.getElementById('bk-checkout');
+        var guestsSel = document.getElementById('bk-guests');
+
+        if (!form || !inInput || !outInput) {
             return;
         }
-        var inInput = qs('#bk-checkin', form);
-        var outInput = qs('#bk-checkout', form);
 
         var addDaysIso = function (isoStr, days) {
-            var d = new Date(isoStr + 'T00:00:00');
-            if (isNaN(d.getTime())) {
-                d = new Date();
+            var parts = isoStr.split('-');
+            if (parts.length !== 3) {
+                return isoStr;
             }
-            d.setDate(d.getDate() + days);
-            return d.toISOString().slice(0, 10);
+            var dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            dt.setDate(dt.getDate() + days);
+            var y = dt.getFullYear();
+            var m = String(dt.getMonth() + 1);
+            if (m.length < 2) {
+                m = '0' + m;
+            }
+            var d = String(dt.getDate());
+            if (d.length < 2) {
+                d = '0' + d;
+            }
+            return y + '-' + m + '-' + d;
         };
 
-        if (inInput && outInput) {
-            inInput.addEventListener('change', function () {
-                var min = addDaysIso(inInput.value, 1);
-                outInput.setAttribute('min', min);
-                if (!outInput.value || outInput.value <= inInput.value) {
-                    outInput.value = min;
-                }
-            });
-        }
+        inInput.addEventListener('change', function () {
+            if (!inInput.value) {
+                return;
+            }
+            var minOut = addDaysIso(inInput.value, 1);
+            outInput.min = minOut;
+            if (!outInput.value || outInput.value <= inInput.value) {
+                outInput.value = minOut;
+            }
+        });
 
         form.addEventListener('submit', function (e) {
             e.preventDefault();
-            var searchUrl = (typeof window.lvhBookoraSearchUrl === 'string' && window.lvhBookoraSearchUrl)
+            var baseUrl = (typeof window.lvhBookoraSearchUrl === 'string' && window.lvhBookoraSearchUrl)
                 ? window.lvhBookoraSearchUrl
                 : form.getAttribute('action');
 
-            var params = [];
-            var dFrom = inInput ? inInput.value : '';
-            var dTo = outInput ? outInput.value : '';
-            if (dFrom) {
-                params.push('date_from=' + encodeURIComponent(dFrom));
-            }
-            if (dTo) {
-                params.push('date_to=' + encodeURIComponent(dTo));
+            var dateFrom = inInput.value;
+            var dateTo = outInput.value;
+            if (dateFrom && (!dateTo || dateTo <= dateFrom)) {
+                dateTo = addDaysIso(dateFrom, 1);
             }
 
-            var guestsSel = qs('#bk-guests', form);
-            var roomsSel = qs('#bk-rooms-count', form);
-            var guests = guestsSel ? parseInt(guestsSel.value, 10) || 2 : 2;
-            var rooms = roomsSel ? parseInt(roomsSel.value, 10) || 1 : 1;
-
-            if (window.lvhBookoraUseOccupancy) {
-                for (var i = 0; i < rooms; i++) {
-                    params.push('occupancy[' + i + '][adults]=' + guests);
-                    params.push('occupancy[' + i + '][children]=0');
-                }
-            } else {
-                params.push('date_from=' + encodeURIComponent(dFrom));
+            var adults = 2;
+            var children = 0;
+            if (guestsSel && guestsSel.value) {
+                var gp = guestsSel.value.split('-');
+                adults = parseInt(gp[0], 10) || 2;
+                children = parseInt(gp[1], 10) || 0;
             }
 
-            var sep = (searchUrl.indexOf('?') !== -1) ? '&' : '?';
-            window.location.href = searchUrl + sep + params.join('&');
+            var params = [
+                'date_from=' + encodeURIComponent(dateFrom),
+                'date_to=' + encodeURIComponent(dateTo)
+            ];
+
+            if (typeof window.lvhBookoraUseOccupancy === 'undefined' || window.lvhBookoraUseOccupancy) {
+                params.push(encodeURIComponent('occupancy[0][adults]') + '=' + encodeURIComponent(String(adults)));
+                params.push(encodeURIComponent('occupancy[0][children]') + '=' + encodeURIComponent(String(children)));
+            }
+
+            var sep = baseUrl.indexOf('?') !== -1 ? '&' : '?';
+            window.location.href = baseUrl + sep + params.join('&');
         });
     }
 
-    /* ------------------------------------------------------------------ */
-    /* Home 2: Customer Services interactive crossfade panels             */
-    /* ------------------------------------------------------------------ */
-    function initServicePanels() {
-        var root = qs('[data-bk-services]');
+    /**
+     * Top Rooms & Suites horizontal carousel with counter & progress indicator.
+     */
+    function initRoomsSlider() {
+        var root = document.querySelector('[data-bk-rooms-slider]');
         if (!root) {
             return;
         }
-        var items = qsa('[data-bk-service-item]', root);
-        var bgs = qsa('[data-bk-service-bg]', root);
+        var track = root.querySelector('[data-bk-rooms-track]');
+        var cards = track ? track.querySelectorAll('.bk-room-card') : [];
+        var prevBtn = root.querySelector('[data-bk-slide-prev]');
+        var nextBtn = root.querySelector('[data-bk-slide-next]');
+        var curEl = root.querySelector('[data-bk-slide-current]');
+        var progEl = root.querySelector('[data-bk-slide-progress]');
+
+        if (!track || !cards.length) {
+            return;
+        }
+
+        var total = cards.length;
+
+        var updateIndicator = function () {
+            var cardWidth = cards[0].offsetWidth + 24;
+            var idx = Math.round(track.scrollLeft / Math.max(1, cardWidth)) + 1;
+            if (idx < 1) {
+                idx = 1;
+            }
+            if (idx > total) {
+                idx = total;
+            }
+            if (curEl) {
+                curEl.textContent = idx < 10 ? '0' + idx : String(idx);
+            }
+            if (progEl) {
+                var pct = Math.min(100, Math.max(20, Math.round((idx / total) * 100)));
+                progEl.style.width = pct + '%';
+            }
+        };
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function () {
+                var step = cards[0].offsetWidth + 24;
+                track.scrollBy({ left: -step, behavior: 'smooth' });
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function () {
+                var step = cards[0].offsetWidth + 24;
+                track.scrollBy({ left: step, behavior: 'smooth' });
+            });
+        }
+
+        track.addEventListener('scroll', updateIndicator, { passive: true });
+        updateIndicator();
+    }
+
+    /**
+     * Interactive Special Offers accordion + right-column preview photo swap.
+     */
+    function initOffersSwitcher() {
+        var items = document.querySelectorAll('[data-bk-offer-item]');
+        var preview = document.getElementById('bk-offer-preview-img');
+        if (!items.length) {
+            return;
+        }
+
+        var activate = function (target) {
+            for (var i = 0; i < items.length; i++) {
+                items[i].classList.toggle('is-active', items[i] === target);
+            }
+            var img = target.getAttribute('data-image');
+            if (preview && img && preview.getAttribute('src') !== img) {
+                preview.style.opacity = '0.35';
+                setTimeout(function () {
+                    preview.setAttribute('src', img);
+                    preview.style.opacity = '1';
+                }, 120);
+            }
+        };
+
+        for (var i = 0; i < items.length; i++) {
+            (function (item) {
+                item.addEventListener('click', function () {
+                    activate(item);
+                });
+                item.addEventListener('mouseenter', function () {
+                    activate(item);
+                });
+            })(items[i]);
+        }
+    }
+
+    /**
+     * Guest Testimonials slider with prev/next buttons & gentle auto-advance.
+     */
+    function initTestimonialsSlider() {
+        var boxes = document.querySelectorAll('[data-bk-testi-slider]');
+        for (var b = 0; b < boxes.length; b++) {
+            initTestiBox(boxes[b]);
+        }
+    }
+
+    function initTestiBox(box) {
+        var slides = box.querySelectorAll('[data-bk-testi-slide]');
+        if (slides.length <= 1) {
+            return;
+        }
+
+        var prevBtn = box.querySelector('[data-bk-testi-prev]');
+        var nextBtn = box.querySelector('[data-bk-testi-next]');
+        var index = 0;
+        var timer = null;
+
+        var show = function (nextIdx) {
+            index = (nextIdx + slides.length) % slides.length;
+            for (var i = 0; i < slides.length; i++) {
+                slides[i].classList.toggle('is-active', i === index);
+            }
+        };
+
+        var startAuto = function () {
+            stopAuto();
+            timer = setInterval(function () {
+                show(index + 1);
+            }, 7000);
+        };
+
+        var stopAuto = function () {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function () {
+                show(index - 1);
+                startAuto();
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function () {
+                show(index + 1);
+                startAuto();
+            });
+        }
+
+        box.addEventListener('mouseenter', stopAuto);
+        box.addEventListener('mouseleave', startAuto);
+        startAuto();
+    }
+
+    /**
+     * Home 2 Customer Services: hover/click crossfade background panels.
+     */
+    function initServicePanels() {
+        var root = document.querySelector('[data-bk-services]');
+        if (!root) {
+            return;
+        }
+        var items = root.querySelectorAll('[data-bk-service-item]');
+        var bgs = root.querySelectorAll('[data-bk-service-bg]');
         if (!items.length || !bgs.length) {
             return;
         }
         var activate = function (idx) {
-            items.forEach(function (it, i) {
-                it.classList.toggle('is-active', i === idx);
-            });
-            bgs.forEach(function (bg, i) {
-                bg.classList.toggle('is-active', i === idx);
-            });
+            for (var i = 0; i < items.length; i++) {
+                items[i].classList.toggle('is-active', i === idx);
+            }
+            for (var j = 0; j < bgs.length; j++) {
+                bgs[j].classList.toggle('is-active', j === idx);
+            }
         };
-        items.forEach(function (item, idx) {
-            item.addEventListener('mouseenter', function () {
-                activate(idx);
-            });
-            item.addEventListener('click', function (e) {
-                if (e.target.closest('a')) {
-                    return;
-                }
-                activate(idx);
-            });
-            item.addEventListener('focus', function () {
-                activate(idx);
-            });
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Popular Rooms slider (horizontal scroll + arrows)                   */
-    /* ------------------------------------------------------------------ */
-    function initRoomsSlider() {
-        qsa('[data-bk-rooms-slider]').forEach(function (root) {
-            var track = qs('[data-bk-rooms-track]', root);
-            if (!track) {
-                return;
-            }
-            var step = function () {
-                var card = track.querySelector('.bk2-room-card');
-                return card ? card.getBoundingClientRect().width + 30 : 340;
-            };
-            var prev = qs('[data-bk-rooms-prev]', root);
-            var next = qs('[data-bk-rooms-next]', root);
-            if (prev) {
-                prev.addEventListener('click', function () {
-                    track.scrollBy({ left: -step(), behavior: 'smooth' });
+        for (var k = 0; k < items.length; k++) {
+            (function (idx) {
+                items[idx].addEventListener('mouseenter', function () {
+                    activate(idx);
                 });
-            }
-            if (next) {
-                next.addEventListener('click', function () {
-                    track.scrollBy({ left: step(), behavior: 'smooth' });
+                items[idx].addEventListener('focusin', function () {
+                    activate(idx);
                 });
-            }
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Featured Suites slider (Home 2 / About / Home 3)                    */
-    /* ------------------------------------------------------------------ */
-    function initFeaturedSlider() {
-        qsa('[data-bk-featured-slider]').forEach(function (root) {
-            var slides = qsa('[data-bk-featured-slide]', root);
-            if (slides.length <= 1) {
-                return;
-            }
-            var prevBtn = qs('[data-bk-featured-prev]', root);
-            var nextBtn = qs('[data-bk-featured-next]', root);
-            var curEl = qs('[data-bk-featured-current]', root);
-            var index = 0;
-            var timer = null;
-
-            var show = function (nextIdx) {
-                index = (nextIdx + slides.length) % slides.length;
-                slides.forEach(function (s, i) {
-                    s.classList.toggle('is-active', i === index);
-                });
-                if (curEl) {
-                    curEl.textContent = (index + 1 < 10 ? '0' : '') + (index + 1);
-                }
-            };
-            var startAuto = function () {
-                stopAuto();
-                timer = setInterval(function () {
-                    show(index + 1);
-                }, 7500);
-            };
-            var stopAuto = function () {
-                if (timer) {
-                    clearInterval(timer);
-                    timer = null;
-                }
-            };
-
-            if (prevBtn) {
-                prevBtn.addEventListener('click', function () {
-                    show(index - 1);
-                    startAuto();
-                });
-            }
-            if (nextBtn) {
-                nextBtn.addEventListener('click', function () {
-                    show(index + 1);
-                    startAuto();
-                });
-            }
-            root.addEventListener('mouseenter', stopAuto);
-            root.addEventListener('mouseleave', startAuto);
-            startAuto();
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Testimonial slider                                                  */
-    /* ------------------------------------------------------------------ */
-    function initTestimonialsSlider() {
-        qsa('[data-bk-testi-slider]').forEach(function (box) {
-            var slides = qsa('[data-bk-testi-slide]', box);
-            if (slides.length <= 1) {
-                return;
-            }
-            var prevBtn = qs('[data-bk-testi-prev]', box);
-            var nextBtn = qs('[data-bk-testi-next]', box);
-            var index = 0;
-            var timer = null;
-
-            var show = function (nextIdx) {
-                index = (nextIdx + slides.length) % slides.length;
-                slides.forEach(function (s, i) {
-                    s.classList.toggle('is-active', i === index);
-                });
-            };
-            var startAuto = function () {
-                stopAuto();
-                timer = setInterval(function () {
-                    show(index + 1);
-                }, 7000);
-            };
-            var stopAuto = function () {
-                if (timer) {
-                    clearInterval(timer);
-                    timer = null;
-                }
-            };
-
-            if (prevBtn) {
-                prevBtn.addEventListener('click', function () {
-                    show(index - 1);
-                    startAuto();
-                });
-            }
-            if (nextBtn) {
-                nextBtn.addEventListener('click', function () {
-                    show(index + 1);
-                    startAuto();
-                });
-            }
-            box.addEventListener('mouseenter', stopAuto);
-            box.addEventListener('mouseleave', startAuto);
-            startAuto();
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Bookmarks (localStorage) + header badge + /bookmarks page          */
-    /* ------------------------------------------------------------------ */
-    function readBookmarks() {
-        try {
-            var raw = window.localStorage.getItem(BOOKMARKS_KEY);
-            var arr = raw ? JSON.parse(raw) : [];
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) {
-            return [];
+            })(k);
         }
     }
 
-    function writeBookmarks(list) {
-        try {
-            window.localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(list));
-        } catch (e) {
-            /* storage unavailable — silently ignore */
-        }
-    }
-
-    function updateBookmarkUI() {
-        var list = readBookmarks();
-        var badge = qs('#bk-bookmark-count');
-        if (badge) {
-            badge.textContent = String(list.length);
-        }
-        qsa('[data-bk-bookmark]').forEach(function (btn) {
-            var id = String(btn.getAttribute('data-id') || '');
-            var saved = list.some(function (it) {
-                return String(it.id) === id && id !== '';
-            });
-            btn.classList.toggle('is-saved', saved);
-        });
-    }
-
-    function initBookmarks() {
-        document.addEventListener('click', function (e) {
-            var btn = e.target.closest ? e.target.closest('[data-bk-bookmark]') : null;
-            if (!btn) {
-                return;
-            }
-            e.preventDefault();
-            var id = String(btn.getAttribute('data-id') || '');
-            if (!id) {
-                return;
-            }
-            var list = readBookmarks();
-            var exists = list.some(function (it) {
-                return String(it.id) === id;
-            });
-            if (exists) {
-                list = list.filter(function (it) {
-                    return String(it.id) !== id;
-                });
-            } else {
-                list.push({
-                    id: id,
-                    name: btn.getAttribute('data-name') || 'Room',
-                    url: btn.getAttribute('data-url') || '#',
-                    price: btn.getAttribute('data-price') || '',
-                    currency: btn.getAttribute('data-currency') || '',
-                    image: btn.getAttribute('data-image') || ''
-                });
-            }
-            writeBookmarks(list);
-            updateBookmarkUI();
-            renderBookmarksPage();
-        });
-
-        updateBookmarkUI();
-        renderBookmarksPage();
-    }
-
-    function renderBookmarksPage() {
-        var grid = qs('#bk-bookmarks-grid');
-        if (!grid) {
+    /**
+     * Full-screen Lightbox for Hero tour button & Interior Gallery tiles.
+     */
+    function initLightbox() {
+        var modal = document.getElementById('bk-lightbox');
+        var imgEl = document.getElementById('bk-lightbox-img');
+        var capEl = document.getElementById('bk-lightbox-caption');
+        if (!modal || !imgEl) {
             return;
         }
-        var list = readBookmarks();
-        var seed = (typeof window.lvhBookoraBookmarksSeed === 'object' && window.lvhBookoraBookmarksSeed)
-            ? window.lvhBookoraBookmarksSeed
-            : [];
-        var seedById = {};
-        seed.forEach(function (s) {
-            seedById[String(s.id)] = s;
-        });
 
-        grid.innerHTML = '';
-        list.forEach(function (item) {
-            var s = seedById[String(item.id)] || {};
-            var name = item.name || s.name || 'Room';
-            var url = item.url || s.url || '#';
-            var price = item.price || s.price || '';
-            var currency = item.currency || s.currency || '';
-            var image = item.image || s.image || '';
+        var triggers = document.querySelectorAll('[data-bk-lightbox]');
+        var closers = modal.querySelectorAll('[data-bk-lightbox-close]');
 
-            var card = document.createElement('article');
-            card.className = 'bk2-room-card';
-            card.innerHTML =
-                '<div class="bk2-room-card__media" style="background-image: url(\'' + String(image).replace(/'/g, '%27') + '\');">' +
-                '  <span class="bk2-room-card__price">' + currency + price + ' <small>/Night</small></span>' +
-                '  <button type="button" class="bk2-room-card__bookmark is-saved" data-bk-bookmark' +
-                '    data-id="' + String(item.id).replace(/"/g, '&quot;') + '"' +
-                '    data-name="' + String(name).replace(/"/g, '&quot;') + '"' +
-                '    data-url="' + String(url).replace(/"/g, '&quot;') + '"' +
-                '    data-price="' + String(price).replace(/"/g, '&quot;') + '"' +
-                '    data-currency="' + String(currency).replace(/"/g, '&quot;') + '"' +
-                '    data-image="' + String(image).replace(/"/g, '&quot;') + '" aria-label="Remove bookmark">' +
-                '    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>' +
-                '  </button>' +
-                '</div>' +
-                '<div class="bk2-room-card__body">' +
-                '  <h3 class="bk2-room-card__title">' + name + '</h3>' +
-                '  <a href="' + String(url).replace(/"/g, '&quot;') + '" class="bk2-room-card__link">Discover More</a>' +
-                '</div>';
-            grid.appendChild(card);
-        });
-
-        var empty = qs('#bk-bookmarks-empty');
-        if (empty) {
-            empty.hidden = list.length > 0;
-        }
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Go Back button (room detail)                                        */
-    /* ------------------------------------------------------------------ */
-    function initGoBack() {
-        qsa('[data-bk-go-back]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                if (window.history.length > 1) {
-                    window.history.back();
-                } else {
-                    window.location.href = window.lvhBookoraSearchUrl || '/';
-                }
-            });
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Share links + copy toast                                            */
-    /* ------------------------------------------------------------------ */
-    function initShare() {
-        var toast = qs('#bk-share-toast');
-        var showToast = function (msg) {
-            if (!toast) {
+        var openModal = function (src, caption) {
+            if (!src) {
                 return;
             }
-            if (msg) {
-                toast.textContent = msg;
+            imgEl.setAttribute('src', src);
+            if (capEl) {
+                capEl.textContent = caption || '';
             }
-            toast.classList.add('is-visible');
-            setTimeout(function () {
-                toast.classList.remove('is-visible');
-            }, 2200);
-        };
-
-        var pageUrl = encodeURIComponent(window.location.href);
-        qsa('[data-bk-share]').forEach(function (el) {
-            var kind = el.getAttribute('data-bk-share');
-            if (kind === 'copy') {
-                el.addEventListener('click', function () {
-                    var url = window.location.href;
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(url).then(function () {
-                            showToast('Link copied to clipboard');
-                        }, function () {
-                            showToast(url);
-                        });
-                    } else {
-                        window.prompt('Copy this link:', url);
-                    }
-                });
-            } else if (el.tagName === 'A') {
-                var href = el.getAttribute('href') || '';
-                el.setAttribute('href', href + pageUrl);
-            }
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Report / Inquiry modal                                              */
-    /* ------------------------------------------------------------------ */
-    function initReportModal() {
-        var modal = qs('#bk-report-modal');
-        if (!modal) {
-            return;
-        }
-        var open = function () {
             modal.classList.add('is-open');
             modal.setAttribute('aria-hidden', 'false');
         };
-        var close = function () {
+
+        var closeModal = function () {
             modal.classList.remove('is-open');
             modal.setAttribute('aria-hidden', 'true');
+            imgEl.setAttribute('src', '');
         };
-        qsa('[data-bk-open-report]').forEach(function (btn) {
-            btn.addEventListener('click', open);
-        });
-        qsa('[data-bk-close-modal]', modal).forEach(function (btn) {
-            btn.addEventListener('click', close);
-        });
+
+        for (var i = 0; i < triggers.length; i++) {
+            (function (el) {
+                el.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    openModal(el.getAttribute('data-bk-lightbox'), el.getAttribute('data-bk-caption'));
+                });
+            })(triggers[i]);
+        }
+
+        for (var j = 0; j < closers.length; j++) {
+            closers[j].addEventListener('click', closeModal);
+        }
+
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-                close();
+                closeModal();
             }
         });
     }
-
-    /* ------------------------------------------------------------------ */
-    /* Project gallery: category filter + lightbox                         */
-    /* ------------------------------------------------------------------ */
-    function initGallery() {
-        var filters = qsa('[data-bk-gallery-filter]');
-        var items = qsa('.bk-gallery-item');
-        if (filters.length && items.length) {
-            filters.forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var val = btn.getAttribute('data-bk-gallery-filter');
-                    filters.forEach(function (b) {
-                        b.classList.toggle('is-active', b === btn);
-                    });
-                    items.forEach(function (item) {
-                        var cat = item.getAttribute('data-category') || '';
-                        item.classList.toggle('is-hidden', !(val === '*' || cat === val));
-                    });
-                });
-            });
-        }
-
-        var lb = qs('#bk-lightbox');
-        if (!lb || !items.length) {
-            return;
-        }
-        var imgEl = qs('img', lb);
-        var capEl = qs('figcaption', lb);
-        var current = 0;
-
-        var visibleItems = function () {
-            return items.filter(function (it) {
-                return !it.classList.contains('is-hidden');
-            });
-        };
-        var openAt = function (item) {
-            var img = qs('img', item);
-            var cap = qs('figcaption strong', item);
-            if (!imgEl || !img) {
-                return;
-            }
-            imgEl.src = img.getAttribute('src') || '';
-            imgEl.alt = img.getAttribute('alt') || '';
-            if (capEl) {
-                capEl.textContent = cap ? cap.textContent : '';
-            }
-            lb.classList.add('is-open');
-            lb.setAttribute('aria-hidden', 'false');
-            var vis = visibleItems();
-            current = Math.max(0, vis.indexOf(item));
-        };
-        var close = function () {
-            lb.classList.remove('is-open');
-            lb.setAttribute('aria-hidden', 'true');
-        };
-        var step = function (dir) {
-            var vis = visibleItems();
-            if (!vis.length) {
-                return;
-            }
-            current = (current + dir + vis.length) % vis.length;
-            openAt(vis[current]);
-        };
-
-        items.forEach(function (item) {
-            item.addEventListener('click', function () {
-                openAt(item);
-            });
-        });
-        qsa('[data-bk-close-lightbox]', lb).forEach(function (btn) {
-            btn.addEventListener('click', close);
-        });
-        var prev = qs('[data-bk-lightbox-prev]', lb);
-        var next = qs('[data-bk-lightbox-next]', lb);
-        if (prev) {
-            prev.addEventListener('click', function () {
-                step(-1);
-            });
-        }
-        if (next) {
-            next.addEventListener('click', function () {
-                step(1);
-            });
-        }
-        document.addEventListener('keydown', function (e) {
-            if (!lb.classList.contains('is-open')) {
-                return;
-            }
-            if (e.key === 'Escape') {
-                close();
-            } else if (e.key === 'ArrowLeft') {
-                step(-1);
-            } else if (e.key === 'ArrowRight') {
-                step(1);
-            }
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Listings filter bar (category page): price filter, count, views,   */
-    /* sort (client-side on the live QloApps .room_cont list)             */
-    /* ------------------------------------------------------------------ */
-    function initListingFilters() {
-        var root = qs('[data-bk-filters]');
-        if (!root) {
-            return;
-        }
-
-        // Locate the live QloApps room list (QloApps 1.8 uses .room_cont rows)
-        var list = qs('#category_data_cont') || qs('#center_column .product_list') ||
-            qs('.product_list') || qs('#center_column');
-        var cards = list ? qsa('.room_cont, li.product-miniature, .product-miniature, .ajax_block_product', list) : [];
-
-        var countEl = qs('[data-bk-items-found]', root);
-        var minInput = qs('[data-bk-price-min]', root);
-        var maxInput = qs('[data-bk-price-max]', root);
-
-        var cardPrice = function (card) {
-            if (card.hasAttribute('data-bk-price')) {
-                return parseFloat(card.getAttribute('data-bk-price')) || 0;
-            }
-            var priceEls = card.querySelectorAll ? card.querySelectorAll('.rm_price_val') : [];
-            var txt = priceEls.length
-                ? priceEls[priceEls.length - 1].textContent
-                : (card.textContent || '');
-            var m = txt.replace(/\s/g, '').match(/([0-9]+(?:[.,][0-9]{1,2})?)/g);
-            if (m && m.length) {
-                return parseFloat(m[m.length - 1].replace(',', '')) || 0;
-            }
-            return 0;
-        };
-
-        var cardName = function (card) {
-            var el = card.querySelector ? card.querySelector('.rm_heading') : null;
-            return (el ? el.textContent : (card.textContent || '')).trim().toLowerCase();
-        };
-
-        var applyPriceFilter = function () {
-            if (!cards.length) {
-                return;
-            }
-            var min = minInput && minInput.value !== '' ? parseFloat(minInput.value) : null;
-            var max = maxInput && maxInput.value !== '' ? parseFloat(maxInput.value) : null;
-            var shown = 0;
-            cards.forEach(function (card) {
-                var p = cardPrice(card);
-                var ok = (min === null || p >= min) && (max === null || p <= max);
-                card.style.display = ok ? '' : 'none';
-                if (ok) {
-                    shown++;
-                }
-            });
-            if (countEl) {
-                countEl.textContent = String(shown);
-            }
-        };
-
-        if (minInput) {
-            minInput.addEventListener('input', applyPriceFilter);
-        }
-        if (maxInput) {
-            maxInput.addEventListener('input', applyPriceFilter);
-        }
-        if (countEl) {
-            countEl.textContent = String(cards.length);
-        }
-
-        // Grid / List / Map view switcher
-        var viewBtns = qsa('[data-bk-view]', root);
-        var mapPanel = qs('[data-bk-map-panel]', root);
-        viewBtns.forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var view = btn.getAttribute('data-bk-view');
-                viewBtns.forEach(function (b) {
-                    b.classList.toggle('is-active', b === btn);
-                });
-                if (mapPanel) {
-                    mapPanel.hidden = (view !== 'map');
-                }
-                document.body.classList.toggle('bk-listview', view === 'list');
-                if (list) {
-                    list.classList.toggle('bk-listview', view === 'list');
-                }
-            });
-        });
-
-        // Sort By — reorder the live QloApps room rows client-side
-        var sortSel = qs('[data-bk-sort]', root);
-        if (sortSel && cards.length && list) {
-            sortSel.addEventListener('change', function () {
-                var val = sortSel.value;
-                if (!val) {
-                    return;
-                }
-                var parts = val.split('-');
-                var key = parts[0];
-                var dir = (parts[1] === 'desc') ? -1 : 1;
-                var original = cards.slice();
-
-                cards.sort(function (a, b) {
-                    if (key === 'price') {
-                        return (cardPrice(a) - cardPrice(b)) * dir;
-                    }
-                    if (key === 'name') {
-                        return cardName(a).localeCompare(cardName(b)) * dir;
-                    }
-                    // date / position — restore DOM order (asc), reversed for desc
-                    return (original.indexOf(a) - original.indexOf(b)) * dir;
-                });
-                cards.forEach(function (card) {
-                    list.appendChild(card);
-                });
-            });
-        }
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Count-up stat counters                                              */
-    /* ------------------------------------------------------------------ */
-    function initCounters() {
-        var els = qsa('[data-bk-countup]');
-        if (!els.length || !window.IntersectionObserver) {
-            return;
-        }
-        var obs = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (!entry.isIntersecting) {
-                    return;
-                }
-                var el = entry.target;
-                obs.unobserve(el);
-                var target = parseInt(el.getAttribute('data-bk-countup'), 10);
-                if (isNaN(target) || target <= 0) {
-                    return;
-                }
-                var suffix = (el.textContent || '').replace(/[0-9]/g, '');
-                var start = null;
-                var dur = 1400;
-                var tick = function (ts) {
-                    if (!start) {
-                        start = ts;
-                    }
-                    var p = Math.min(1, (ts - start) / dur);
-                    var eased = 1 - Math.pow(1 - p, 3);
-                    el.textContent = Math.round(target * eased) + suffix;
-                    if (p < 1) {
-                        window.requestAnimationFrame(tick);
-                    }
-                };
-                window.requestAnimationFrame(tick);
-            });
-        }, { threshold: 0.4 });
-        els.forEach(function (el) {
-            obs.observe(el);
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Newsletter: keep the return URL current so redirects land nicely    */
-    /* ------------------------------------------------------------------ */
-    function initNewsletterReturn() {
-        qsa('.bk-newsletter-return').forEach(function (input) {
-            try {
-                input.value = window.location.href;
-            } catch (e) {
-                /* keep fallback */
-            }
-        });
-    }
-
-    /* ------------------------------------------------------------------ */
-    /* Boot                                                                */
-    /* ------------------------------------------------------------------ */
-    onReady(function () {
-        preserveAjaxCartModal();
-        initStickyHeader();
-        initMobileDrawer();
-        initTopButton();
-        initAvailabilityForm();
-        initServicePanels();
-        initRoomsSlider();
-        initFeaturedSlider();
-        initTestimonialsSlider();
-        initBookmarks();
-        initGoBack();
-        initShare();
-        initReportModal();
-        initGallery();
-        initListingFilters();
-        initCounters();
-        initNewsletterReturn();
-    });
 })();

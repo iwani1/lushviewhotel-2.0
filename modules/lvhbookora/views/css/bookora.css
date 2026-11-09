@@ -2064,3 +2064,521 @@ body:not(#index) #wk_search_submit:hover,
         text-align: center;
     }
 }
+
+/* ==========================================================================
+   BOOKORA HOME 2 (theme package structure) — about-2, popular rooms,
+   customer services, featured showcase, facilities grid, team, articles.
+   Palette vars come from :root (--bk-teal / --bk-gold / --bk-serif / --bk-sans).
+   ========================================================================== */
+
+/* ---------- 2. About (Home 2: portrait + counter | story | seal + wide) -- */
+.bk2-about__grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1.3fr 1.15fr;
+    gap: 46px;
+    align-items: center;
+}
+
+.bk2-about__left {
+    position: relative;
+}
+
+.bk2-about__portrait img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 800 / 1120;
+    object-fit: cover;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(20, 17, 13, 0.16);
+}
+
+.bk2-counter {
+    position: absolute;
+    right: -28px;
+    bottom: 38px;
+    background: var(--bk-gold);
+    color: #14110d;
+    border-radius: 16px;
+    padding: 17px 22px;
+    min-width: 150px;
+    box-shadow: 0 18px 44px rgba(20, 17, 13, 0.22);
+}
+
+.bk2-counter strong {
+    display: block;
+    font-family: var(--bk-serif);
+    font-size: 34px;
+    line-height: 1;
+}
+
+.bk2-counter span {
+    display: block;
+    margin-top: 5px;
+    font-size: 12.5px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.bk2-about__stat2 {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 22px 0 26px;
+}
+
+.bk2-about__stat2 strong {
+    font-family: var(--bk-serif);
+    font-size: 32px;
+    color: var(--bk-teal);
+}
+
+.bk2-about__stat2 span {
+    color: #6e6a62;
+    font-size: 14px;
+}
+
+.bk2-about__right {
+    position: relative;
+    padding-top: 26px;
+}
+
+.bk2-about__wide img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1060 / 525;
+    object-fit: cover;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(20, 17, 13, 0.16);
+}
+
+.bk2-seal {
+    position: absolute;
+    top: -34px;
+    left: -34px;
+    z-index: 2;
+    color: var(--bk-gold);
+    background: #fff;
+    border-radius: 50%;
+    padding: 8px;
+    box-shadow: 0 16px 40px rgba(20, 17, 13, 0.18);
+    animation: bk2SealSpin 26s linear infinite;
+}
+
+@keyframes bk2SealSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ---------- 3. Popular Rooms: floating PRICE/ Night badge ---------------- */
+.bk-room-card__price-float {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: rgba(20, 17, 13, 0.82);
+    color: #f7f3ec;
+    border: 1px solid rgba(201, 160, 99, 0.5);
+    border-radius: 12px;
+    padding: 8px 12px;
+    text-align: center;
+    line-height: 1.15;
+}
+
+.bk-room-card__price-float small {
+    display: block;
+    font-size: 9.5px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--bk-gold);
+}
+
+.bk-room-card__price-float strong {
+    display: block;
+    font-family: var(--bk-serif);
+    font-size: 19px;
+}
+
+/* ---------- 4. Customer Services (hover crossfade panels) --------------- */
+.bk2-services {
+    position: relative;
+    overflow: hidden;
+    padding: 110px 0;
+    background: var(--bk-teal);
+}
+
+.bk2-services__bgs,
+.bk2-services__bg,
+.bk2-services__overlay {
+    position: absolute;
+    inset: 0;
+}
+
+.bk2-services__bg {
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    transform: scale(1.04);
+    transition: opacity 0.55s ease, transform 0.9s ease;
+}
+
+.bk2-services__bg.is-active {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.bk2-services__overlay {
+    background: linear-gradient(100deg, rgba(15, 12, 9, 0.88) 0%, rgba(15, 12, 9, 0.62) 48%, rgba(15, 12, 9, 0.34) 100%);
+}
+
+.bk2-services__inner {
+    position: relative;
+    z-index: 2;
+}
+
+.bk2-services__head {
+    max-width: 620px;
+    margin-bottom: 48px;
+}
+
+.bk2-services__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-width: 760px;
+}
+
+.bk2-services__item {
+    border-top: 1px solid rgba(247, 243, 236, 0.18);
+}
+
+.bk2-services__item:last-child {
+    border-bottom: 1px solid rgba(247, 243, 236, 0.18);
+}
+
+.bk2-services__item a {
+    display: flex;
+    gap: 22px;
+    align-items: flex-start;
+    padding: 22px 10px;
+    color: rgba(247, 243, 236, 0.82);
+    text-decoration: none;
+    transition: background 0.25s ease, padding-left 0.25s ease;
+}
+
+.bk2-services__item.is-active a,
+.bk2-services__item a:hover {
+    background: rgba(201, 160, 99, 0.14);
+    padding-left: 22px;
+}
+
+.bk2-services__num {
+    font-family: var(--bk-serif);
+    font-size: 20px;
+    color: var(--bk-gold);
+    min-width: 36px;
+}
+
+.bk2-services__item h3 {
+    margin: 0 0 6px;
+    font-family: var(--bk-serif);
+    font-size: 25px;
+    font-weight: 600;
+    color: #f7f3ec;
+}
+
+.bk2-services__item p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: rgba(247, 243, 236, 0.68);
+}
+
+/* ---------- 5. Featured room showcase (dark full-bleed slider) ----------- */
+.bk2-showcase {
+    position: relative;
+    overflow: hidden;
+    background: #0f0c09;
+}
+
+.bk2-showcase__slides {
+    position: relative;
+    min-height: 640px;
+}
+
+.bk2-showcase__slide {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.8s ease, visibility 0.8s ease;
+    display: flex;
+    align-items: center;
+}
+
+.bk2-showcase__slide.is-active {
+    position: relative;
+    opacity: 1;
+    visibility: visible;
+}
+
+.bk2-showcase__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(15, 12, 9, 0.9) 0%, rgba(15, 12, 9, 0.55) 55%, rgba(15, 12, 9, 0.2) 100%);
+}
+
+.bk2-showcase__content {
+    position: relative;
+    z-index: 2;
+    padding-top: 90px;
+    padding-bottom: 90px;
+    max-width: 640px;
+}
+
+.bk2-showcase__title {
+    margin: 0 0 16px;
+    font-family: var(--bk-serif);
+    font-size: 54px;
+    line-height: 1.08;
+    color: #f7f3ec;
+}
+
+.bk2-showcase__desc {
+    margin: 0 0 24px;
+    color: rgba(247, 243, 236, 0.8);
+    font-size: 15.5px;
+    line-height: 1.8;
+    max-width: 480px;
+}
+
+.bk2-showcase__price {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    background: rgba(201, 160, 99, 0.16);
+    border: 1px solid rgba(201, 160, 99, 0.5);
+    border-radius: 12px;
+    padding: 10px 18px;
+    margin-bottom: 20px;
+}
+
+.bk2-showcase__price small {
+    font-size: 10.5px;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--bk-gold);
+}
+
+.bk2-showcase__price strong {
+    font-family: var(--bk-serif);
+    font-size: 30px;
+    color: #f7f3ec;
+}
+
+.bk2-showcase__meta {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    margin: 0 0 30px;
+    padding: 0;
+    color: rgba(247, 243, 236, 0.78);
+    font-size: 13px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.bk2-showcase__nav {
+    position: absolute;
+    right: 40px;
+    bottom: 36px;
+    z-index: 3;
+    display: flex;
+    gap: 12px;
+}
+
+/* ---------- 6. Facilities 8-item grid ---------------------------------- */
+.bk2-fac-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 26px;
+}
+
+.bk2-fac-item {
+    background: rgba(247, 243, 236, 0.05);
+    border: 1px solid rgba(247, 243, 236, 0.12);
+    border-radius: 16px;
+    padding: 28px 22px;
+    transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+
+.bk2-fac-item:hover {
+    transform: translateY(-5px);
+    border-color: rgba(201, 160, 99, 0.5);
+    background: rgba(201, 160, 99, 0.1);
+}
+
+.bk2-fac-item__icon {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(201, 160, 99, 0.16);
+    color: var(--bk-gold);
+    margin-bottom: 16px;
+}
+
+.bk2-fac-item h3 {
+    margin: 0 0 8px;
+    font-family: var(--bk-serif);
+    font-size: 19.5px;
+    font-weight: 600;
+    color: #f7f3ec;
+}
+
+.bk2-fac-item p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: rgba(247, 243, 236, 0.62);
+}
+
+/* ---------- 7. Our Expert (team) --------------------------------------- */
+.bk2-team__grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 26px;
+}
+
+.bk2-team-card {
+    background: #fff;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 18px 46px rgba(20, 17, 13, 0.1);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.bk2-team-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 26px 60px rgba(20, 17, 13, 0.16);
+}
+
+.bk2-team-card__media img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 356 / 340;
+    object-fit: cover;
+}
+
+.bk2-team-card__body {
+    padding: 18px 18px 22px;
+    text-align: center;
+}
+
+.bk2-team-card__body h3 {
+    margin: 0 0 4px;
+    font-family: var(--bk-serif);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--bk-teal);
+}
+
+.bk2-team-card__body span {
+    display: block;
+    color: var(--bk-gold);
+    font-size: 11.5px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.bk2-team-card__mail {
+    color: #6e6a62;
+    font-size: 12.5px;
+    text-decoration: none;
+}
+
+.bk2-team-card__mail:hover {
+    color: var(--bk-gold);
+}
+
+.bk2-team__cta {
+    text-align: center;
+    margin-top: 42px;
+}
+
+/* ---------- 9. Hotel Articles grid ------------------------------------- */
+.bk2-blog__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+}
+
+/* ---------- Responsive ------------------------------------------------- */
+@media (max-width: 1024px) {
+    .bk2-about__grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .bk2-about__right {
+        grid-column: 1 / -1;
+    }
+
+    .bk2-fac-grid,
+    .bk2-team__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .bk2-blog__grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .bk2-showcase__title {
+        font-size: 42px;
+    }
+}
+
+@media (max-width: 720px) {
+    .bk2-about__grid {
+        grid-template-columns: 1fr;
+        gap: 58px;
+    }
+
+    .bk2-counter {
+        right: 12px;
+    }
+
+    .bk2-seal {
+        left: 8px;
+        top: -20px;
+    }
+
+    .bk2-seal svg {
+        width: 84px;
+        height: 84px;
+    }
+
+    .bk2-fac-grid,
+    .bk2-team__grid,
+    .bk2-blog__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .bk2-showcase__slides {
+        min-height: 520px;
+    }
+
+    .bk2-showcase__title {
+        font-size: 32px;
+    }
+
+    .bk2-showcase__nav {
+        right: 18px;
+        bottom: 18px;
+    }
+}

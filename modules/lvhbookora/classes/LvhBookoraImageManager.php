@@ -152,6 +152,24 @@ class LvhBookoraImageManager
      * @param string $slot
      * @return string
      */
+    /**
+     * Uploaded photo URL for a slot, or '' when nothing has been uploaded yet.
+     *
+     * @param Context $context
+     * @param string $slot
+     *
+     * @return string
+     */
+    public static function uploadUrl(Context $context, $slot)
+    {
+        if (self::hasUpload($slot)) {
+            return $context->link->getMediaLink(
+                _MODULE_DIR_ . 'lvhbookora/views/img/uploads/' . basename(self::filePath($slot))
+            ) . '?v=' . (int) filemtime(self::filePath($slot));
+        }
+        return '';
+    }
+
     public static function url(Context $context, $slot)
     {
         $spec = isset(self::slots()[$slot]) ? self::slots()[$slot] : null;
