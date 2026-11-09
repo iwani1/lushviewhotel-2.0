@@ -31,6 +31,7 @@ if (!defined('_PS_VERSION_')) {
 
 require_once dirname(__FILE__) . '/classes/LvhBookoraRouteMap.php';
 require_once dirname(__FILE__) . '/classes/LvhBookoraDataProvider.php';
+require_once dirname(__FILE__) . '/classes/LvhBookoraImageManager.php';
 
 class LvhBookora extends Module
 {
@@ -41,7 +42,7 @@ class LvhBookora extends Module
     {
         $this->name = 'lvhbookora';
         $this->tab = 'front_office_features';
-        $this->version = '2.0.0';
+        $this->version = '2.1.0';
         $this->author = 'Lush View Hotel';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -538,7 +539,7 @@ class LvhBookora extends Module
     }
 
     /**
-     * Back Office configuration form to customize headlines, stats, or accent colors.
+     * Back Office: Hotel Photo Library + configuration form.
      *
      * @return string
      */
@@ -561,7 +562,118 @@ class LvhBookora extends Module
             $output .= $this->displayConfirmation($this->l('Bookora storefront settings saved and Smart Cache refreshed.'));
         }
 
-        return $output . $this->renderConfigForm();
+        if (Tools::isSubmit('submitSaveBookoraPhotos')) {
+            $output .= $this->processPhotoLibrary();
+        }
+
+        return $output . $this->renderPhotoLibrary() . $this->renderConfigForm();
+    }
+
+    /**
+     * Process the Hotel Photo Library form: per-slot uploads and removals.
+     * Every photo is cover-cropped to the exact size the site displays.
+     *
+     * @return string Rendered confirmation / error block
+     */
+    protected function processPhotoLibrary()
+    {
+        $ok = 0;
+        $err = array();
+
+        foreach (LvhBookoraImageManager::slots() as $slot => $spec) {
+            // Removal
+            if (Tools::getValue('bk_remove_' . $slot)) {
+                LvhBookoraImageManager::delete($slot);
+                continue;
+            }
+            // Upload
+            if (!empty($_FILES['bk_photo_' . $slot]) && is_array($_FILES['bk_photo_' . $slot])) {
+                if ($_FILES['bk_photo_' . $slot]['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $problem = LvhBookoraImageManager::processUpload($slot, $_FILES['bk_photo_' . $slot]);
+                    if ($problem === '') {
+                        $ok++;
+                    } else {
+                        $err[] = $spec['label'] . ': ' . $problem;
+                    }
+                }
+            }
+        }
+
+        $out = '';
+        if ($ok > 0) {
+            $this->flushThemeCaches();
+            $out .= $this->displayConfirmation(sprintf(
+                $this->l('%d photo(s) uploaded and resized to the exact size the website needs. Smart Cache refreshed.'),
+                $ok
+            ));
+        }
+        foreach ($err as $e) {
+            $out .= $this->displayError($e);
+        }
+        if ($ok === 0 && empty($err)) {
+            $out .= $this->displayConfirmation($this->l('Photo library updated.'));
+        }
+        return $out;
+    }
+
+    /**
+     * Render the Hotel Photo Library panel (custom upload UI with live
+     * previews and required dimensions per slot).
+     *
+     * @return string
+     */
+    protected function renderPhotoLibrary()
+    {
+        $html = '<div class="panel" id="bk-photo-library">'
+            . '<div class="panel-heading"><i class="icon-picture"></i> '
+            . $this->l('Hotel Photo Library — Upload Your Real Hotel Photos') . '</div>'
+            . '<div class="panel-body">'
+            . '<p class="help-block">'
+            . $this->l('Upload your own hotel photography below. Each photo is automatically cropped to the exact size the website displays — just pick a clear shot with the right orientation and we handle the rest. JPG, PNG or WebP, max 10 MB per photo.')
+            . '</p>'
+            . '<form action="' . html_entity_decode((string) Tools::safeOutput($_SERVER['REQUEST_URI']), ENT_QUOTES, 'UTF-8')
+            . '" method="post" enctype="multipart/form-data" class="form-horizontal">';
+
+        foreach (LvhBookoraImageManager::slots() as $slot => $spec) {
+            $current = LvhBookoraImageManager::url($this->context, $slot);
+            $has = LvhBookoraImageManager::hasUpload($slot);
+            $html .= '<div class="row" style="border-bottom:1px solid #eee;padding:14px 0;">'
+                . '<div class="col-lg-2 col-md-2 text-center">'
+                . '<img src="' . htmlspecialchars($current, ENT_QUOTES, 'UTF-8') . '" alt="" '
+                . 'style="max-width:100%;max-height:110px;border-radius:6px;border:1px solid #ddd;object-fit:cover;">'
+                . '</div>'
+                . '<div class="col-lg-4 col-md-4">'
+                . '<strong>' . htmlspecialchars($spec['label'], ENT_QUOTES, 'UTF-8') . '</strong>'
+                . '<p class="help-block" style="margin:4px 0 0;">' . htmlspecialchars($spec['help'], ENT_QUOTES, 'UTF-8') . '</p>'
+                . '</div>'
+                . '<div class="col-lg-2 col-md-2">'
+                . '<span class="label label-info" style="font-size:12px;">'
+                . (int) $spec['w'] . ' × ' . (int) $spec['h'] . ' px</span>'
+                . '<p class="help-block" style="margin:4px 0 0;">' . $this->l('Exact output size') . '</p>'
+                . '</div>'
+                . '<div class="col-lg-4 col-md-4">'
+                . '<input type="file" name="bk_photo_' . htmlspecialchars($slot, ENT_QUOTES, 'UTF-8')
+                . '" accept=".jpg,.jpeg,.png,.webp,image/*">'
+                . ($has
+                    ? '<label style="font-weight:normal;margin-top:6px;"><input type="checkbox" name="bk_remove_'
+                      . htmlspecialchars($slot, ENT_QUOTES, 'UTF-8') . '" value="1"> '
+                      . $this->l('Remove — restore the default photo') . '</label>'
+                    : '')
+                . '</div>'
+                . '</div>';
+        }
+
+        $html .= '<div class="panel-footer" style="margin-top:14px;">'
+            . '<button type="submit" name="submitSaveBookoraPhotos" class="btn btn-primary">'
+            . '<i class="process-icon-save"></i> ' . $this->l('Save Photo Library') . '</button>'
+            . '</div>'
+            . '</form>'
+            . '<p class="help-block" style="margin-top:10px;">'
+            . $this->l('Tip: room & suite catalogue photos are managed separately in Rooms → each room type, so prices and availability stay in sync with the booking engine.')
+            . '</p>'
+            . '</div></div>';
+
+        return $html;
     }
 
     /**

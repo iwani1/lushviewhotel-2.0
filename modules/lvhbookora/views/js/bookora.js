@@ -222,6 +222,34 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Popular Rooms slider (horizontal scroll + arrows)                   */
+    /* ------------------------------------------------------------------ */
+    function initRoomsSlider() {
+        qsa('[data-bk-rooms-slider]').forEach(function (root) {
+            var track = qs('[data-bk-rooms-track]', root);
+            if (!track) {
+                return;
+            }
+            var step = function () {
+                var card = track.querySelector('.bk2-room-card');
+                return card ? card.getBoundingClientRect().width + 30 : 340;
+            };
+            var prev = qs('[data-bk-rooms-prev]', root);
+            var next = qs('[data-bk-rooms-next]', root);
+            if (prev) {
+                prev.addEventListener('click', function () {
+                    track.scrollBy({ left: -step(), behavior: 'smooth' });
+                });
+            }
+            if (next) {
+                next.addEventListener('click', function () {
+                    track.scrollBy({ left: step(), behavior: 'smooth' });
+                });
+            }
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Featured Suites slider (Home 2 / About / Home 3)                    */
     /* ------------------------------------------------------------------ */
     function initFeaturedSlider() {
@@ -816,6 +844,7 @@
         initTopButton();
         initAvailabilityForm();
         initServicePanels();
+        initRoomsSlider();
         initFeaturedSlider();
         initTestimonialsSlider();
         initBookmarks();

@@ -3176,3 +3176,198 @@
         font-size: 27px;
     }
 }
+
+/* ======================================================================
+   v2.1.0 — Bookora Home 2 exact-template refinements (bk-ab2 / bk-room2)
+   ====================================================================== */
+
+/* Subtitle flourishes (theme's .subtitle <i></i> marks) */
+.bk2-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bk2-eyebrow::before,
+.bk2-eyebrow::after {
+    content: '';
+    width: 26px;
+    height: 1px;
+    background: var(--bk2-gold);
+    position: relative;
+}
+
+.bk2-eyebrow::before {
+    box-shadow: -38px 0 0 -0.5px var(--bk2-gold);
+}
+
+.bk2-eyebrow::after {
+    box-shadow: 38px 0 0 -0.5px var(--bk2-gold);
+}
+
+.bk2-hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.bk2-hero__eyebrow::before,
+.bk2-hero__eyebrow::after {
+    content: '';
+    width: 34px;
+    height: 1px;
+    background: var(--bk2-gold-2);
+}
+
+/* About 2 layout: portrait + counter | heading+desc row | seal + landscape */
+.bk2-about__grid {
+    grid-template-columns: 0.9fr 1.35fr;
+    gap: 56px;
+}
+
+.bk2-about__photo--main {
+    height: auto;
+    aspect-ratio: 396 / 560;
+}
+
+.bk2-about__text-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 46px;
+}
+
+.bk2-about__top {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    align-items: flex-start;
+}
+
+.bk2-about__heading {
+    flex: 1 1 55%;
+}
+
+.bk2-about__desc {
+    flex: 1 1 42%;
+    padding-top: 8px;
+}
+
+.bk2-title__accent {
+    font-style: italic;
+    color: var(--bk2-gold);
+}
+
+.bk2-about__scroll {
+    position: relative;
+    padding-left: 64px;
+}
+
+.bk2-about__photo--second {
+    margin-top: 0;
+    height: auto;
+    aspect-ratio: 1056 / 521;
+}
+
+.bk2-seal {
+    position: absolute;
+    left: -8px;
+    top: -34px;
+    z-index: 3;
+    background: var(--bk2-cream);
+    border-radius: 50%;
+    padding: 8px;
+}
+
+/* Popular Rooms slider (bk-room2 swiper equivalent) */
+.bk2-rooms__slider {
+    position: relative;
+}
+
+.bk2-rooms__track {
+    display: flex;
+    gap: 30px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    padding: 6px 2px 22px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.bk2-rooms__track::-webkit-scrollbar {
+    display: none;
+}
+
+.bk2-rooms__track .bk2-room-card {
+    flex: 0 0 calc((100% - 60px) / 3);
+    scroll-snap-align: start;
+}
+
+.bk2-rooms__arrow {
+    position: absolute;
+    top: 42%;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1px solid rgba(20, 17, 13, 0.18);
+    background: var(--bk2-white);
+    color: var(--bk2-ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.22s ease;
+    z-index: 4;
+    box-shadow: 0 12px 30px rgba(20, 17, 13, 0.12);
+}
+
+.bk2-rooms__arrow:hover {
+    background: var(--bk2-ink);
+    color: var(--bk2-gold-2);
+    border-color: var(--bk2-ink);
+}
+
+.bk2-rooms__arrow--prev {
+    left: -22px;
+}
+
+.bk2-rooms__arrow--next {
+    right: -22px;
+}
+
+/* Testimonial backdrop (uploaded photo) */
+.bk2-testi {
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+@media (max-width: 1280px) {
+    .bk2-rooms__track .bk2-room-card {
+        flex: 0 0 calc((100% - 30px) / 2);
+    }
+    .bk2-about__top {
+        flex-direction: column;
+        gap: 18px;
+    }
+}
+
+@media (max-width: 720px) {
+    .bk2-rooms__track .bk2-room-card {
+        flex: 0 0 86%;
+    }
+    .bk2-rooms__arrow {
+        display: none;
+    }
+    .bk2-about__scroll {
+        padding-left: 0;
+    }
+    .bk2-seal {
+        left: auto;
+        right: 8px;
+        top: -30px;
+    }
+    .bk2-testi {
+        background-attachment: scroll;
+    }
+}

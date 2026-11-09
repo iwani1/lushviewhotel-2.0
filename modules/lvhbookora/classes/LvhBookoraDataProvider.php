@@ -18,6 +18,7 @@ if (!defined('_PS_VERSION_')) {
 }
 
 require_once dirname(__FILE__) . '/../LvhBookoraRouteMap.php';
+require_once dirname(__FILE__) . '/LvhBookoraImageManager.php';
 
 class LvhBookoraDataProvider
 {
@@ -256,11 +257,14 @@ class LvhBookoraDataProvider
         $testimonials = self::loadTestimonials($context, $idLang);
         $articles = self::getArticles($context, $common);
 
+        // Hotel Photo Library uploads override the bundled artwork
+        $heroUpload = LvhBookoraImageManager::url($context, 'hero');
+
         return array(
-            'hero_image' => $common['module_img'] . 'hero-home2.jpg',
+            'hero_image' => $heroUpload !== '' ? $heroUpload : ($common['module_img'] . 'hero-home2.jpg'),
             'hero_image_fallback' => $heroImage,
-            'about_image_1' => $pickPhoto(1),
-            'about_image_2' => $pickPhoto(2),
+            'about_image_1' => LvhBookoraImageManager::url($context, 'about_main'),
+            'about_image_2' => LvhBookoraImageManager::url($context, 'about_second'),
             'popular_rooms' => $popular,
             'services' => self::getServicePanels($common),
             'featured_suites' => $featured,
@@ -268,6 +272,7 @@ class LvhBookoraDataProvider
             'availability_checks' => self::getAvailabilityChecks(),
             'team' => self::getTeamMembers($common, 4),
             'testimonials' => $testimonials,
+            'testi_bg' => LvhBookoraImageManager::url($context, 'testimonial_bg'),
             'articles' => array_slice($articles, 0, 3),
             'partners' => self::getPartners(),
         );
@@ -545,29 +550,30 @@ class LvhBookoraDataProvider
     public static function getServicePanels(array $common)
     {
         $img = $common['module_img'];
+        $context = Context::getContext();
         return array(
             array(
                 'title' => 'Room Booking',
                 'text' => 'Reserve elegantly appointed rooms and suites in seconds with live availability, instant confirmation, and flexible direct-booking rates.',
-                'image' => $img . 'wellness-concierge.jpg',
+                'image' => LvhBookoraImageManager::url($context, 'service_1'),
                 'url' => $common['search_url'],
             ),
             array(
                 'title' => 'Fitness Center',
                 'text' => 'Keep your routine in our fully equipped fitness center with modern cardio and strength stations, open daily for resident guests.',
-                'image' => $img . 'dining-lounge.jpg',
+                'image' => LvhBookoraImageManager::url($context, 'service_2'),
                 'url' => $common['contact_url'],
             ),
             array(
                 'title' => '24/7 Room Service',
                 'text' => 'From late-night refreshments to sunrise breakfast in bed, our kitchen and service team are on call around the clock.',
-                'image' => $img . 'conference-banquet.jpg',
+                'image' => LvhBookoraImageManager::url($context, 'service_3'),
                 'url' => $common['contact_url'],
             ),
             array(
                 'title' => 'Swimming Pool Access',
                 'text' => 'Unwind beside our serene pool and lounge deck — complimentary for in-house guests, with poolside refreshments all day.',
-                'image' => $img . 'hero-home2.jpg',
+                'image' => LvhBookoraImageManager::url($context, 'service_4'),
                 'url' => $common['contact_url'],
             ),
         );
@@ -657,11 +663,12 @@ class LvhBookoraDataProvider
     public static function getTeamMembers(array $common, $count = 4)
     {
         $img = $common['module_img'];
+        $context = Context::getContext();
         $members = array(
-            array('name' => 'Kwame Mensah', 'role' => 'General Manager', 'image' => $img . 'team-1.jpg', 'mail' => 'gm@lushviewhotel.net'),
-            array('name' => 'Abena Osei', 'role' => 'Head of Guest Relations', 'image' => $img . 'team-2.jpg', 'mail' => 'guestrelations@lushviewhotel.net'),
-            array('name' => 'Kofi Boateng', 'role' => 'Executive Chef', 'image' => $img . 'team-3.jpg', 'mail' => 'chef@lushviewhotel.net'),
-            array('name' => 'Akosua Danquah', 'role' => 'Events & Conference Director', 'image' => $img . 'team-4.jpg', 'mail' => 'events@lushviewhotel.net'),
+            array('name' => 'Kwame Mensah', 'role' => 'General Manager', 'image' => LvhBookoraImageManager::url($context, 'team_1'), 'mail' => 'gm@lushviewhotel.net'),
+            array('name' => 'Abena Osei', 'role' => 'Head of Guest Relations', 'image' => LvhBookoraImageManager::url($context, 'team_2'), 'mail' => 'guestrelations@lushviewhotel.net'),
+            array('name' => 'Kofi Boateng', 'role' => 'Executive Chef', 'image' => LvhBookoraImageManager::url($context, 'team_3'), 'mail' => 'chef@lushviewhotel.net'),
+            array('name' => 'Akosua Danquah', 'role' => 'Events & Conference Director', 'image' => LvhBookoraImageManager::url($context, 'team_4'), 'mail' => 'events@lushviewhotel.net'),
             array('name' => 'Yaw Appiah', 'role' => 'Chief Engineer', 'image' => '', 'mail' => 'engineering@lushviewhotel.net'),
             array('name' => 'Efua Sarpong', 'role' => 'Reservations Manager', 'image' => '', 'mail' => 'reservations@lushviewhotel.net'),
             array('name' => 'Nii Lartey', 'role' => 'Head of Security', 'image' => '', 'mail' => 'security@lushviewhotel.net'),

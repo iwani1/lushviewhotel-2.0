@@ -29,7 +29,7 @@
         <div class="bk2-hero__scroll" aria-hidden="true"><span></span></div>
     </section>
 
-    <!-- ============ 2. About Us (Home 2) ============ -->
+    <!-- ============ 2. About Us (Home 2 — Bookora bk-ab2 layout) ============ -->
     <section id="bk-about" class="bk2-about">
         <div class="bk-container bk2-about__grid">
             <div class="bk2-about__media">
@@ -40,33 +40,39 @@
                 </div>
             </div>
 
-            <div class="bk2-about__copy">
-                <p class="bk2-eyebrow">About Us</p>
-                <h2 class="bk2-title">{$bk.cfg.LVH_BK_ABOUT_TITLE|escape:'html':'UTF-8'}</h2>
-                <p class="bk2-lead">{$bk.cfg.LVH_BK_ABOUT_BODY|escape:'html':'UTF-8'}</p>
-                <a href="{$bk.about_url|escape:'html':'UTF-8'}" class="bk-btn bk-btn--dark">Discover More</a>
-            </div>
+            <div class="bk2-about__text-wrap">
+                <div class="bk2-about__top">
+                    <div class="bk2-about__heading">
+                        <p class="bk2-eyebrow">About Us</p>
+                        <h2 class="bk2-title">Experience Comfort, <span class="bk2-title__accent">Elegance &amp; Exceptional Hospitality</span></h2>
+                    </div>
+                    <div class="bk2-about__desc">
+                        <p class="bk2-lead">{$bk.cfg.LVH_BK_ABOUT_BODY|escape:'html':'UTF-8'}</p>
+                        <a href="{$bk.about_url|escape:'html':'UTF-8'}" class="bk-btn bk-btn--dark">Discover More</a>
+                    </div>
+                </div>
 
-            <div class="bk2-about__media bk2-about__media--right">
-                <div class="bk2-about__photo bk2-about__photo--second" style="background-image: url('{$bk_home.about_image_2|escape:'html':'UTF-8'}');"></div>
-                <div class="bk2-seal" aria-hidden="true">
-                    <svg viewBox="0 0 120 120" class="bk2-seal__ring">
-                        <defs>
-                            <path id="bkSealPath" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/>
-                        </defs>
-                        <text class="bk2-seal__text">
-                            <textPath href="#bkSealPath">LUSH VIEW HOTEL • BOOK DIRECT &amp; SAVE • LUSH VIEW HOTEL • </textPath>
-                        </text>
-                    </svg>
-                    <span class="bk2-seal__core">
-                        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 15 9l7 .5-5.4 4.6L18.5 21 12 17.2 5.5 21l1.9-6.9L2 9.5 9 9z"/></svg>
-                    </span>
+                <div class="bk2-about__scroll">
+                    <div class="bk2-seal" aria-hidden="true">
+                        <svg viewBox="0 0 120 120" class="bk2-seal__ring">
+                            <defs>
+                                <path id="bkSealPath" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/>
+                            </defs>
+                            <text class="bk2-seal__text">
+                                <textPath href="#bkSealPath">LUSH VIEW HOTEL • BOOK DIRECT &amp; SAVE • LUSH VIEW HOTEL • </textPath>
+                            </text>
+                        </svg>
+                        <span class="bk2-seal__core">
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 15 9l7 .5-5.4 4.6L18.5 21 12 17.2 5.5 21l1.9-6.9L2 9.5 9 9z"/></svg>
+                        </span>
+                    </div>
+                    <div class="bk2-about__photo bk2-about__photo--second" style="background-image: url('{$bk_home.about_image_2|escape:'html':'UTF-8'}');"></div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ============ 3. Popular Rooms (6 cards) ============ -->
+    <!-- ============ 3. Popular Rooms (Bookora bk-room2 slider) ============ -->
     <section id="bk-rooms" class="bk2-rooms">
         <div class="bk-container">
             <div class="bk2-head bk2-head--center">
@@ -74,7 +80,8 @@
                 <h2 class="bk2-title">Discover The Rooms Guests Love Most</h2>
             </div>
 
-            <div class="bk2-rooms__grid">
+            <div class="bk2-rooms__slider" data-bk-rooms-slider>
+                <div class="bk2-rooms__track" data-bk-rooms-track>
                 {foreach from=$bk_home.popular_rooms item=rm}
                 <article class="bk2-room-card">
                     <div class="bk2-room-card__media" style="background-image: url('{$rm.image|escape:'html':'UTF-8'}');">
@@ -97,6 +104,14 @@
                     </div>
                 </article>
                 {/foreach}
+                </div>
+
+                <button type="button" class="bk2-rooms__arrow bk2-rooms__arrow--prev" data-bk-rooms-prev aria-label="Previous rooms">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <button type="button" class="bk2-rooms__arrow bk2-rooms__arrow--next" data-bk-rooms-next aria-label="Next rooms">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
             </div>
         </div>
     </section>
@@ -172,7 +187,8 @@
         <div class="bk-container">
             <div class="bk2-head bk2-head--center">
                 <p class="bk2-eyebrow">Facilities</p>
-                <h2 class="bk2-title">World-Class Facilities For Your Comfort</h2>
+                <h2 class="bk2-title">Facilities</h2>
+                <p class="bk2-lead">We help guests create lifetime memories they never forget.</p>
             </div>
 
             <div class="bk2-facilities__grid">
@@ -258,6 +274,7 @@
             <div class="bk2-head bk2-head--center">
                 <p class="bk2-eyebrow">Our Expert</p>
                 <h2 class="bk2-title">Meet The Faces Behind Your Perfect Stay</h2>
+                <p class="bk2-lead">A passionate team ensuring comfort, care, and unforgettable guest experiences.</p>
             </div>
 
             <div class="bk2-team__grid">
@@ -291,7 +308,7 @@
     </section>
 
     <!-- ============ 9. Testimonial slider ============ -->
-    <section id="bk-testimonials" class="bk2-testi" data-bk-testi-slider>
+    <section id="bk-testimonials" class="bk2-testi" data-bk-testi-slider{if $bk_home.testi_bg} style="background-image: url('{$bk_home.testi_bg|escape:'html':'UTF-8'}');"{/if}>
         <div class="bk-container">
             <div class="bk2-head bk2-head--center">
                 <p class="bk2-eyebrow">Testimonial</p>
@@ -332,6 +349,7 @@
             <div class="bk2-head bk2-head--center">
                 <p class="bk2-eyebrow">Trending Topics</p>
                 <h2 class="bk2-title">Hotel Articles</h2>
+                <p class="bk2-lead">Experience the perfect blend of comfort, style, and hospitality.</p>
             </div>
 
             <div class="bk2-blog__grid">
