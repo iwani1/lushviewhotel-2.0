@@ -1,0 +1,2066 @@
+/**
+ * Lush View Hotel — Bookora Luxury Storefront Stylesheet (QloApps 1.8.0)
+ *
+ * Design tokens matched to Themexriver Bookora:
+ *   --bk-teal:  #0b3b36 (Deep Forest Teal)
+ *   --bk-gold:  #c2a275 (Warm Champagne Gold)
+ *   --bk-cream: #faf8f5 (Warm Alabaster Ivory)
+ *   --bk-dark:  #0e1111 (Obsidian Luxury Dark)
+ *   --bk-card:  #171b1b (Elevated Charcoal Card)
+ *   --bk-ink:   #121619 (Editorial Ink)
+ */
+
+:root {
+    --bk-teal: #0b3b36;
+    --bk-teal-soft: #13544d;
+    --bk-gold: #c2a275;
+    --bk-gold-hover: #ae8c5d;
+    --bk-cream: #faf8f5;
+    --bk-dark: #0e1111;
+    --bk-dark-card: #171b1b;
+    --bk-ink: #121619;
+    --bk-muted: #5c636a;
+    --bk-border: #e6e1d8;
+    --bk-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --bk-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ==========================================================================
+   QloApps Shell Resets (Non-destructive, CSS-only, preserves #layer_cart)
+   ========================================================================== */
+html,
+body#index,
+body#index #page {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-x: hidden;
+}
+
+body.qloapps {
+    font-family: var(--bk-sans);
+    color: var(--bk-ink);
+    background-color: #ffffff;
+    -webkit-font-smoothing: antialiased;
+}
+
+#page > .header-container,
+#page > .header-container > #header {
+    height: auto !important;
+    min-height: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    position: relative !important;
+    z-index: 1020;
+}
+
+#header > *:not(.banner),
+#header > .banner > .container > .row > *:not(#bk-header-shell) {
+    display: none !important;
+}
+
+#header > .banner,
+#header > .banner > .container,
+#header > .banner > .container > .row {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+/* Full-bleed Bookora Homepage container breakout */
+body#index .columns-container,
+body#index #columns,
+body#index #columns > .row,
+body#index #center_column {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+}
+
+body#index #slider_row,
+body#index #home-page-tabs,
+body#index #center_column > .tab-content,
+body#index #center_column > .clearfix > *:not(#bk-home-root) {
+    display: none !important;
+}
+
+/* Replace stock footer visually while keeping global JS hooks intact */
+#page > .footer-container {
+    display: none !important;
+}
+
+/* ==========================================================================
+   Core Bookora Typography, Layout & Buttons
+   ========================================================================== */
+.bk-root,
+.bk-root *,
+.bk-root *::before,
+.bk-root *::after {
+    box-sizing: border-box;
+}
+
+.bk-root {
+    font-family: var(--bk-sans);
+    color: var(--bk-ink);
+    line-height: 1.65;
+}
+
+.bk-container {
+    width: 100%;
+    max-width: 1290px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.bk-section {
+    padding: 104px 0;
+}
+
+/* Signature Bookora Eyebrow Ornament: ▸─── Label ───◂ */
+.bk-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.bk-eyebrow--center {
+    justify-content: center;
+}
+
+.bk-eyebrow__text {
+    font-family: var(--bk-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--bk-teal);
+}
+
+.bk-eyebrow--light .bk-eyebrow__text {
+    color: var(--bk-gold);
+}
+
+.bk-eyebrow__line {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 1px;
+    background: rgba(11, 59, 54, 0.35);
+}
+
+.bk-eyebrow--light .bk-eyebrow__line {
+    background: rgba(194, 162, 117, 0.45);
+}
+
+.bk-eyebrow__line--left::before,
+.bk-eyebrow__line--right::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    background: var(--bk-teal);
+    transform: translateY(-50%) rotate(45deg);
+}
+
+.bk-eyebrow--light .bk-eyebrow__line--left::before,
+.bk-eyebrow--light .bk-eyebrow__line--right::after {
+    background: var(--bk-gold);
+}
+
+.bk-eyebrow__line--left::before {
+    left: 0;
+}
+
+.bk-eyebrow__line--right::after {
+    right: 0;
+}
+
+.bk-section-title {
+    font-family: var(--bk-serif);
+    font-size: clamp(32px, 3.6vw, 48px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--bk-ink);
+    margin: 0 0 18px;
+}
+
+.bk-section-title--light {
+    color: #ffffff;
+}
+
+.bk-section-desc {
+    font-size: 15px;
+    color: var(--bk-muted);
+    margin: 0 0 28px;
+    max-width: 540px;
+}
+
+.bk-section-desc--light {
+    color: rgba(255, 255, 255, 0.74);
+}
+
+.bk-section-desc--narrow {
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.bk-section-head--center {
+    text-align: center;
+    margin-bottom: 52px;
+}
+
+/* Buttons */
+.bk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 28px;
+    font-family: var(--bk-sans);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 7px;
+    text-decoration: none !important;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: 1px solid transparent;
+}
+
+.bk-btn--gold {
+    background: var(--bk-gold);
+    color: #ffffff !important;
+    border-color: var(--bk-gold);
+}
+
+.bk-btn--gold:hover,
+.bk-btn--gold:focus {
+    background: var(--bk-gold-hover);
+    border-color: var(--bk-gold-hover);
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(194, 162, 117, 0.32);
+}
+
+.bk-btn--outline {
+    background: #ffffff;
+    color: var(--bk-ink) !important;
+    border-color: #cfc8bc;
+}
+
+.bk-btn--outline:hover,
+.bk-btn--outline:focus {
+    border-color: var(--bk-teal);
+    color: var(--bk-teal) !important;
+    background: #f6f3ee;
+}
+
+.bk-btn--outline-full {
+    background: #f8f6f2;
+    color: var(--bk-ink) !important;
+    border-color: #dfd8cc;
+}
+
+.bk-btn--outline-full:hover {
+    background: var(--bk-teal);
+    border-color: var(--bk-teal);
+    color: #ffffff !important;
+}
+
+.bk-btn--sm {
+    padding: 10px 20px;
+    font-size: 13px;
+}
+
+.bk-btn--block {
+    display: flex;
+    width: 100%;
+}
+
+.bk-link-arrow {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--bk-teal) !important;
+    text-decoration: none !important;
+    transition: color 0.2s ease;
+}
+
+.bk-link-arrow:hover {
+    color: var(--bk-gold-hover) !important;
+}
+
+/* ==========================================================================
+   0. Top Deep Forest Teal Utility Bar & Sticky Main Navbar
+   ========================================================================== */
+.bk-topbar {
+    background: var(--bk-teal);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12.5px;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+}
+
+.bk-topbar__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.bk-topbar__socials {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.bk-topbar__socials a {
+    color: rgba(255, 255, 255, 0.85) !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.bk-topbar__socials a:hover {
+    color: var(--bk-gold) !important;
+}
+
+.bk-topbar__contacts {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+}
+
+.bk-topbar__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.92) !important;
+    text-decoration: none !important;
+}
+
+.bk-topbar__item:hover {
+    color: var(--bk-gold) !important;
+}
+
+.bk-topbar__dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bk-gold);
+}
+
+/* Main Sticky Navbar */
+.bk-navbar {
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid rgba(18, 22, 25, 0.07);
+    transition: box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.bk-navbar.is-fixed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1060;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 30px rgba(12, 18, 22, 0.08);
+}
+
+.bk-navbar__inner {
+    height: 82px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.bk-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none !important;
+}
+
+.bk-brand__logo {
+    max-height: 44px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.bk-brand__name {
+    font-family: var(--bk-serif);
+    font-size: 25px;
+    font-weight: 700;
+    color: var(--bk-ink);
+    letter-spacing: -0.01em;
+}
+
+.bk-nav {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+}
+
+.bk-nav__link {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bk-ink) !important;
+    text-decoration: none !important;
+    padding: 6px 0;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.bk-nav__link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 0;
+    height: 2px;
+    background: var(--bk-gold);
+    transition: width 0.22s ease;
+}
+
+.bk-nav__link:hover,
+.bk-nav__link.is-active {
+    color: var(--bk-teal) !important;
+}
+
+.bk-nav__link:hover::after,
+.bk-nav__link.is-active::after {
+    width: 100%;
+}
+
+.bk-navbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.bk-cart-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--bk-border);
+    color: var(--bk-ink) !important;
+    background: var(--bk-cream);
+    text-decoration: none !important;
+    transition: border-color 0.2s ease;
+}
+
+.bk-cart-pill:hover {
+    border-color: var(--bk-gold);
+}
+
+.bk-cart-pill__badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--bk-teal);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bk-signin-link {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--bk-ink) !important;
+    text-decoration: none !important;
+}
+
+.bk-signin-link:hover {
+    color: var(--bk-teal) !important;
+}
+
+.bk-burger {
+    display: none;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--bk-border);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 9px;
+    cursor: pointer;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.bk-burger span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--bk-ink);
+    border-radius: 2px;
+}
+
+/* Mobile Slide Drawer */
+.bk-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.bk-drawer.is-open {
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.bk-drawer__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 14, 16, 0.55);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.bk-drawer.is-open .bk-drawer__backdrop {
+    opacity: 1;
+}
+
+.bk-drawer__panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(340px, 88vw);
+    background: #ffffff;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transform: translateX(100%);
+    transition: transform 0.28s ease;
+}
+
+.bk-drawer.is-open .bk-drawer__panel {
+    transform: translateX(0);
+}
+
+.bk-drawer__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--bk-border);
+}
+
+.bk-drawer__close {
+    border: 0;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--bk-ink);
+}
+
+.bk-drawer__links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 20px 0;
+    overflow-y: auto;
+}
+
+.bk-drawer__links a {
+    padding: 11px 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--bk-ink) !important;
+    text-decoration: none !important;
+    border-bottom: 1px solid #f2efe9;
+}
+
+.bk-drawer__phone {
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--bk-muted);
+}
+
+/* ==========================================================================
+   1. Bookora Split Editorial Hero + Glassmorphic Pill Availability Bar
+   ========================================================================== */
+.bk-hero__upper {
+    position: relative;
+    background: var(--bk-cream);
+    padding: 76px 0 68px;
+    text-align: center;
+    overflow: hidden;
+}
+
+.bk-hero__lines {
+    position: absolute;
+    inset: 0;
+    max-width: 1320px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+}
+
+.bk-hero__lines span {
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(to bottom, rgba(194, 162, 117, 0.24), rgba(194, 162, 117, 0.04));
+    position: relative;
+}
+
+.bk-hero__lines span:nth-child(2)::after,
+.bk-hero__lines span:nth-child(5)::after {
+    content: '';
+    position: absolute;
+    top: 38px;
+    left: -2px;
+    width: 5px;
+    height: 18px;
+    border-radius: 3px;
+    background: rgba(194, 162, 117, 0.55);
+}
+
+.bk-hero__headline-wrap {
+    position: relative;
+    z-index: 2;
+}
+
+.bk-hero__title {
+    font-family: var(--bk-serif);
+    font-size: clamp(38px, 5vw, 68px);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    color: var(--bk-ink);
+    margin: 4px auto 28px;
+    max-width: 920px;
+}
+
+.bk-hero__ctas {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* Lower Panoramic Visual + Glassmorphic Search Pill */
+.bk-hero__visual {
+    position: relative;
+    min-height: 540px;
+    background-color: #1a2422;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: stretch;
+}
+
+.bk-hero__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(12, 18, 18, 0.42) 0%,
+        rgba(12, 18, 18, 0.25) 48%,
+        rgba(10, 14, 15, 0.76) 100%
+    );
+}
+
+.bk-hero__visual-inner {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-top: 64px;
+    padding-bottom: 42px;
+}
+
+/* Frosted Pill Availability Form */
+.bk-search-pill {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 12px 14px 12px 28px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.22);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+    align-items: center;
+    gap: 14px;
+}
+
+.bk-search-pill__field {
+    padding-right: 14px;
+    border-right: 1px solid rgba(255, 255, 255, 0.24);
+    text-align: left;
+}
+
+.bk-search-pill__field:nth-child(4) {
+    border-right: 0;
+}
+
+.bk-search-pill__field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.78);
+    margin: 0 0 3px;
+}
+
+.bk-search-pill__control input,
+.bk-search-pill__control select {
+    width: 100%;
+    background: transparent !important;
+    border: 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    font-family: var(--bk-sans);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 2px 0;
+    cursor: pointer;
+}
+
+.bk-search-pill__control input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
+.bk-search-pill__control select option {
+    color: var(--bk-ink);
+    background: #ffffff;
+}
+
+.bk-search-pill__submit {
+    padding: 15px 30px;
+    border-radius: 999px;
+    border: 0;
+    background: #ffffff;
+    color: var(--bk-ink);
+    font-family: var(--bk-sans);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.22s ease;
+}
+
+.bk-search-pill__submit:hover {
+    background: var(--bk-gold);
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.bk-hero__bottom {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-top: 120px;
+}
+
+.bk-hero__caption {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 430px;
+    margin: 0;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.bk-tour-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 340px;
+    padding: 14px 20px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.22s ease, transform 0.22s ease;
+}
+
+.bk-tour-card:hover {
+    background: rgba(255, 255, 255, 0.26);
+    transform: translateY(-2px);
+}
+
+.bk-tour-card__play {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #ffffff;
+    color: var(--bk-teal);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22);
+}
+
+.bk-tour-card__text {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+/* ==========================================================================
+   2. About Us — 3-Column Editorial Grid + Stat Counters
+   ========================================================================== */
+.bk-about {
+    background: #ffffff;
+}
+
+.bk-about__grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr 0.95fr;
+    gap: 42px;
+    align-items: stretch;
+}
+
+.bk-about__col-left,
+.bk-about__col-mid {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.bk-about__photo {
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--bk-cream);
+}
+
+.bk-about__photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.55s ease;
+}
+
+.bk-about__photo:hover img {
+    transform: scale(1.04);
+}
+
+.bk-about__photo--short {
+    height: 290px;
+    margin-bottom: 32px;
+}
+
+.bk-about__photo--tall {
+    height: 100%;
+    min-height: 440px;
+}
+
+.bk-stat-card {
+    padding-top: 24px;
+    border-top: 1px solid var(--bk-border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 28px;
+}
+
+.bk-stat-card__num {
+    display: block;
+    font-family: var(--bk-serif);
+    font-size: 46px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--bk-teal);
+    margin-bottom: 6px;
+}
+
+.bk-stat-card__label {
+    font-size: 13.5px;
+    color: var(--bk-muted);
+}
+
+.bk-stat-card__icon {
+    color: var(--bk-teal);
+    opacity: 0.65;
+}
+
+/* ==========================================================================
+   3. Our Facilities — Obsidian Dark Showcase + 2x2 Arch Motif Cards
+   ========================================================================== */
+.bk-facilities {
+    background: radial-gradient(circle at 12% 18%, #1c2423 0%, var(--bk-dark) 55%);
+    color: #ffffff;
+}
+
+.bk-facilities__layout {
+    display: grid;
+    grid-template-columns: 0.9fr 1.45fr;
+    gap: 54px;
+    align-items: center;
+}
+
+.bk-facilities__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+}
+
+.bk-fac-card {
+    position: relative;
+    background: var(--bk-dark-card);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 40px 28px 34px;
+    text-align: center;
+    overflow: hidden;
+    transition: transform 0.28s ease, border-color 0.28s ease;
+}
+
+.bk-fac-card::before {
+    content: '';
+    position: absolute;
+    top: -65px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 210px;
+    height: 150px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.025);
+    pointer-events: none;
+}
+
+.bk-fac-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(194, 162, 117, 0.45);
+}
+
+.bk-fac-card__icon {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    margin: 0 auto 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--bk-gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bk-fac-card h3 {
+    font-family: var(--bk-serif);
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0 0 10px;
+}
+
+.bk-fac-card p {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.68);
+    margin: 0;
+}
+
+/* ==========================================================================
+   4. Top Accommodations — Live QloApps Rooms Carousel
+   ========================================================================== */
+.bk-rooms {
+    background: var(--bk-cream);
+}
+
+.bk-rooms-track {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: calc((100% - 48px) / 3);
+    gap: 24px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+}
+
+.bk-rooms-track::-webkit-scrollbar {
+    display: none;
+}
+
+.bk-room-card {
+    scroll-snap-align: start;
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid var(--bk-border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.28s ease, box-shadow 0.28s ease;
+}
+
+.bk-room-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 38px rgba(15, 23, 22, 0.08);
+}
+
+.bk-room-card__media {
+    position: relative;
+    display: block;
+    height: 250px;
+    overflow: hidden;
+    background: #eae5dc;
+}
+
+.bk-room-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.5s ease;
+}
+
+.bk-room-card:hover .bk-room-card__media img {
+    transform: scale(1.05);
+}
+
+.bk-room-card__badge {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(11, 59, 54, 0.88);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.bk-room-card__body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.bk-room-card__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.bk-room-card__title {
+    font-family: var(--bk-serif);
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.bk-room-card__title a {
+    color: var(--bk-ink) !important;
+    text-decoration: none !important;
+}
+
+.bk-room-card__title a:hover {
+    color: var(--bk-teal) !important;
+}
+
+.bk-room-card__price {
+    white-space: nowrap;
+}
+
+.bk-room-card__price strong {
+    font-family: var(--bk-serif);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--bk-teal);
+}
+
+.bk-room-card__price span {
+    font-size: 12.5px;
+    color: var(--bk-muted);
+    margin-left: 2px;
+}
+
+.bk-room-card__desc {
+    font-size: 13.5px;
+    color: var(--bk-muted);
+    margin: 0 0 16px;
+    flex: 1;
+}
+
+.bk-room-card__meta {
+    list-style: none;
+    padding: 14px 0;
+    margin: 0 0 16px;
+    border-top: 1px solid #f0ece4;
+    border-bottom: 1px solid #f0ece4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12.5px;
+    color: var(--bk-muted);
+}
+
+.bk-room-card__meta li {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.bk-room-card__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* Carousel Bottom Progress Bar */
+.bk-slider-bar {
+    margin-top: 36px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.bk-slider-bar__count {
+    font-family: var(--bk-serif);
+    font-size: 22px;
+    color: var(--bk-muted);
+    white-space: nowrap;
+}
+
+.bk-slider-bar__count strong {
+    font-size: 28px;
+    color: var(--bk-ink);
+}
+
+.bk-slider-bar__line {
+    flex: 1;
+    height: 2px;
+    background: #e2dcd1;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.bk-slider-bar__line span {
+    display: block;
+    height: 100%;
+    background: var(--bk-teal);
+    transition: width 0.3s ease;
+}
+
+.bk-slider-bar__nav {
+    display: flex;
+    gap: 10px;
+}
+
+.bk-circle-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid #d5cebf;
+    background: #ffffff;
+    color: var(--bk-ink);
+    font-size: 16px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.bk-circle-btn:hover {
+    background: var(--bk-teal);
+    border-color: var(--bk-teal);
+    color: #ffffff;
+}
+
+.bk-circle-btn--sm {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+}
+
+/* ==========================================================================
+   5. Special Offers & Packages (Interactive Accordion + Preview Photo)
+   ========================================================================== */
+.bk-offers {
+    background: #ffffff;
+}
+
+.bk-offers__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+    padding-bottom: 34px;
+    border-bottom: 1px solid var(--bk-border);
+    margin-bottom: 42px;
+}
+
+.bk-offers__header .bk-section-title {
+    margin-bottom: 0;
+}
+
+.bk-offers__header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    max-width: 520px;
+}
+
+.bk-offers__header-right p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--bk-muted);
+}
+
+.bk-offers__body {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 48px;
+    align-items: center;
+}
+
+.bk-offer-item {
+    padding: 22px 0;
+    border-bottom: 1px solid var(--bk-border);
+    cursor: pointer;
+}
+
+.bk-offer-item__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.bk-offer-item__head h3 {
+    font-family: var(--bk-serif);
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--bk-ink);
+    transition: color 0.2s ease;
+}
+
+.bk-offer-item.is-active .bk-offer-item__head h3 {
+    color: var(--bk-teal);
+}
+
+.bk-offer-item__price strong {
+    font-family: var(--bk-serif);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--bk-gold-hover);
+}
+
+.bk-offer-item__price small {
+    font-size: 12.5px;
+    color: var(--bk-muted);
+    margin-left: 3px;
+}
+
+.bk-offer-item__details {
+    display: none;
+    padding-top: 14px;
+}
+
+.bk-offer-item.is-active .bk-offer-item__details {
+    display: block;
+}
+
+.bk-offer-item__details ul {
+    margin: 0 0 12px;
+    padding-left: 18px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 18px;
+    font-size: 13.5px;
+    color: var(--bk-muted);
+}
+
+.bk-offers__media {
+    border-radius: 16px;
+    overflow: hidden;
+    height: 430px;
+    background: var(--bk-cream);
+    box-shadow: 0 22px 48px rgba(15, 22, 20, 0.1);
+}
+
+.bk-offers__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: opacity 0.25s ease;
+}
+
+/* ==========================================================================
+   6. Pricing Plans — 3-Column Bookora Comparison Layout
+   ========================================================================== */
+.bk-plans {
+    background: var(--bk-cream);
+}
+
+.bk-plans__head {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 44px;
+}
+
+.bk-plans__head-inner {
+    max-width: 680px;
+}
+
+.bk-plans__grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1fr 1fr;
+    gap: 26px;
+    align-items: stretch;
+}
+
+.bk-plans__visual {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    min-height: 440px;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: flex-start;
+}
+
+.bk-plans__visual-overlay {
+    width: 100%;
+    height: 100%;
+    padding: 34px 28px;
+    background: linear-gradient(180deg, rgba(11, 28, 26, 0.78) 0%, rgba(11, 28, 26, 0.25) 60%, rgba(11, 28, 26, 0.55) 100%);
+}
+
+.bk-plans__visual-overlay h3 {
+    font-family: var(--bk-serif);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #ffffff;
+    margin: 0;
+}
+
+.bk-plan-card {
+    background: #ffffff;
+    border: 1px solid var(--bk-border);
+    border-radius: 14px;
+    padding: 36px 30px;
+    display: flex;
+    flex-direction: column;
+}
+
+.bk-plan-card--featured {
+    border-color: var(--bk-gold);
+    box-shadow: 0 18px 40px rgba(194, 162, 117, 0.14);
+}
+
+.bk-plan-card__title {
+    font-family: var(--bk-serif);
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: var(--bk-ink);
+}
+
+.bk-plan-card__desc {
+    font-size: 13.5px;
+    color: var(--bk-muted);
+    margin: 0 0 22px;
+}
+
+.bk-plan-card__price {
+    padding: 18px 0;
+    border-top: 1px solid #f0ece4;
+    margin-bottom: 18px;
+}
+
+.bk-plan-card__price strong {
+    display: block;
+    font-family: var(--bk-serif);
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--bk-ink);
+}
+
+.bk-plan-card__price span {
+    font-size: 12.5px;
+    color: var(--bk-muted);
+}
+
+.bk-plan-card__list {
+    list-style: none;
+    padding: 0;
+    margin: 24px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    font-size: 13.5px;
+    color: var(--bk-ink);
+}
+
+.bk-plan-card__list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bk-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(11, 59, 54, 0.1);
+    color: var(--bk-teal);
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   7. Testimonials — Full-Bleed Room Backdrop + Floating Review Card
+   ========================================================================== */
+.bk-testimonials {
+    position: relative;
+    padding: 120px 0;
+    background-color: #18201f;
+    background-size: cover;
+    background-position: center;
+}
+
+.bk-testimonials__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 15, 16, 0.56);
+}
+
+.bk-testimonials__inner {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+}
+
+.bk-testi-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 44px 48px;
+    max-width: 680px;
+    width: 100%;
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.28);
+    position: relative;
+}
+
+.bk-testi-card__stars {
+    color: #e59819;
+    font-size: 18px;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+}
+
+.bk-testi-slide {
+    display: none;
+}
+
+.bk-testi-slide.is-active {
+    display: block;
+}
+
+.bk-testi-slide__quote {
+    font-family: var(--bk-serif);
+    font-size: clamp(20px, 2.2vw, 25px);
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--bk-ink);
+    margin: 0 0 26px;
+    padding: 0;
+    border: 0;
+}
+
+.bk-testi-slide__author {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.bk-testi-slide__avatar,
+.bk-testi-slide__monogram {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.bk-testi-slide__monogram {
+    background: var(--bk-teal);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bk-testi-slide__author strong {
+    display: block;
+    font-size: 15px;
+    color: var(--bk-ink);
+}
+
+.bk-testi-slide__author span {
+    font-size: 13px;
+    color: var(--bk-muted);
+}
+
+.bk-testi-card__nav {
+    position: absolute;
+    right: 36px;
+    bottom: 36px;
+    display: flex;
+    gap: 8px;
+}
+
+/* ==========================================================================
+   8. Explore Our Elegant Rooms — Staggered Gallery Strip + Lightbox
+   ========================================================================== */
+.bk-gallery {
+    background: #ffffff;
+    padding-bottom: 70px;
+}
+
+.bk-gallery__cta {
+    margin-top: 8px;
+}
+
+.bk-gallery__strip {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.bk-gallery__tile {
+    position: relative;
+    height: 290px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 0;
+    padding: 0;
+    background: var(--bk-cream);
+    cursor: pointer;
+    display: block;
+}
+
+.bk-gallery__tile--offset {
+    transform: translateY(22px);
+}
+
+.bk-gallery__tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.5s ease;
+}
+
+.bk-gallery__tile:hover img {
+    transform: scale(1.06);
+}
+
+.bk-gallery__zoom {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(18, 22, 25, 0.78);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: all 0.25s ease;
+}
+
+.bk-gallery__tile:hover .bk-gallery__zoom {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ==========================================================================
+   9. Hotel Highlights & Experiences (2-Column Editorial Cards)
+   ========================================================================== */
+.bk-highlights {
+    background: var(--bk-cream);
+}
+
+.bk-highlights__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px;
+}
+
+.bk-post-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid var(--bk-border);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.bk-post-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 36px rgba(15, 22, 20, 0.08);
+}
+
+.bk-post-card__media {
+    display: block;
+    height: 270px;
+    overflow: hidden;
+}
+
+.bk-post-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.5s ease;
+}
+
+.bk-post-card:hover .bk-post-card__media img {
+    transform: scale(1.04);
+}
+
+.bk-post-card__body {
+    padding: 28px 30px 32px;
+}
+
+.bk-post-card__tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bk-teal);
+    margin-bottom: 10px;
+}
+
+.bk-post-card__body h3 {
+    font-family: var(--bk-serif);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 0 0 12px;
+}
+
+.bk-post-card__body h3 a {
+    color: var(--bk-ink) !important;
+    text-decoration: none !important;
+}
+
+.bk-post-card__body h3 a:hover {
+    color: var(--bk-teal) !important;
+}
+
+.bk-post-card__body p {
+    font-size: 14px;
+    color: var(--bk-muted);
+    margin: 0 0 18px;
+}
+
+/* ==========================================================================
+   10. Bookora Gold Ribbon, 4-Column Obsidian Footer & Lightbox
+   ========================================================================== */
+.bk-gold-ribbon {
+    background: var(--bk-gold);
+    color: #ffffff;
+    padding: 18px 0;
+}
+
+.bk-gold-ribbon__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-family: var(--bk-serif);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.bk-footer {
+    background: #111414;
+    color: rgba(255, 255, 255, 0.78);
+    padding: 76px 0 68px;
+}
+
+.bk-footer__grid {
+    display: grid;
+    grid-template-columns: 1.25fr 0.85fr 0.95fr 1.05fr;
+    gap: 38px;
+    align-items: start;
+}
+
+.bk-footer__contact-card {
+    background: #090b0b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 30px 28px;
+}
+
+.bk-footer__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none !important;
+    margin-bottom: 14px;
+}
+
+.bk-footer__brand img {
+    max-height: 36px;
+    border-radius: 4px;
+}
+
+.bk-footer__brand span {
+    font-family: var(--bk-serif);
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.bk-footer__tagline {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.65);
+    margin: 0 0 20px;
+}
+
+.bk-footer h4 {
+    font-family: var(--bk-serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0 0 18px;
+}
+
+.bk-footer__contact-list,
+.bk-footer__col ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.bk-footer a {
+    color: rgba(255, 255, 255, 0.76) !important;
+    text-decoration: none !important;
+    transition: color 0.2s ease;
+}
+
+.bk-footer a:hover {
+    color: var(--bk-gold) !important;
+}
+
+.bk-footer__note {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.68);
+    margin: 0 0 18px;
+}
+
+.bk-footer__hours {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.bk-copyright {
+    background: var(--bk-teal);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 16px 0;
+    font-size: 13px;
+}
+
+.bk-copyright__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* Lightbox Modal */
+.bk-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.bk-lightbox.is-open {
+    display: flex;
+}
+
+.bk-lightbox__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 11, 12, 0.88);
+}
+
+.bk-lightbox__dialog {
+    position: relative;
+    z-index: 2;
+    max-width: 960px;
+    max-height: 88vh;
+    text-align: center;
+}
+
+.bk-lightbox__dialog img {
+    max-width: 100%;
+    max-height: 78vh;
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.bk-lightbox__caption {
+    color: rgba(255, 255, 255, 0.9);
+    margin: 12px 0 0;
+    font-family: var(--bk-serif);
+    font-size: 20px;
+}
+
+.bk-lightbox__close {
+    position: absolute;
+    top: -42px;
+    right: 0;
+    border: 0;
+    background: transparent;
+    color: #ffffff;
+    font-size: 34px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* ==========================================================================
+   11. Seamless Bookora Skin for Inner QloApps Pages
+       (/8-lush-view-hotel, Room Detail, Cart Modal & Checkout)
+   ========================================================================== */
+body:not(#index) .columns-container {
+    background: var(--bk-cream);
+    padding: 42px 0 72px;
+}
+
+body:not(#index) h1,
+body:not(#index) .page-heading,
+body:not(#index) .rm_heading,
+body:not(#index) .hotel-room-type-name {
+    font-family: var(--bk-serif) !important;
+    color: var(--bk-ink);
+}
+
+body:not(#index) .room_cont,
+body:not(#index) .filter_panel_card,
+body:not(#index) .booking-form,
+body:not(#index) .box {
+    border-radius: 12px !important;
+    border-color: var(--bk-border) !important;
+}
+
+body:not(#index) .ajax_add_to_cart_button,
+body:not(#index) #SubmitLogin,
+body:not(#index) #submitAccount,
+body:not(#index) #submitMessage,
+body:not(#index) .btn.book-now-submit,
+body:not(#index) #wk_search_submit,
+#layer_cart .button-container a.btn-default {
+    background: var(--bk-gold) !important;
+    border-color: var(--bk-gold) !important;
+    color: #ffffff !important;
+    border-radius: 7px !important;
+    font-family: var(--bk-sans) !important;
+    font-weight: 600 !important;
+    transition: background 0.2s ease !important;
+}
+
+body:not(#index) .ajax_add_to_cart_button:hover,
+body:not(#index) #wk_search_submit:hover,
+#layer_cart .button-container a.btn-default:hover {
+    background: var(--bk-teal) !important;
+    border-color: var(--bk-teal) !important;
+}
+
+#layer_cart {
+    border-radius: 14px !important;
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+@media (max-width: 1199px) {
+    .bk-nav {
+        gap: 18px;
+    }
+    .bk-rooms-track {
+        grid-auto-columns: calc((100% - 24px) / 2);
+    }
+    .bk-plans__grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .bk-plans__visual {
+        grid-column: 1 / -1;
+        min-height: 240px;
+    }
+    .bk-footer__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 991px) {
+    .bk-nav,
+    .bk-signin-link,
+    .bk-navbar__cta {
+        display: none !important;
+    }
+    .bk-burger {
+        display: inline-flex;
+    }
+    .bk-section {
+        padding: 74px 0;
+    }
+    .bk-search-pill {
+        border-radius: 18px;
+        padding: 20px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .bk-search-pill__field {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+        padding-bottom: 10px;
+    }
+    .bk-search-pill__submit {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+    .bk-hero__bottom {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-top: 56px;
+    }
+    .bk-about__grid,
+    .bk-facilities__layout,
+    .bk-offers__body,
+    .bk-highlights__grid {
+        grid-template-columns: 1fr;
+    }
+    .bk-about__photo--tall {
+        min-height: 300px;
+    }
+    .bk-offers__header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .bk-gallery__strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .bk-gallery__tile--offset {
+        transform: none;
+    }
+    .bk-hide-sm {
+        display: none !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bk-hide-xs {
+        display: none !important;
+    }
+    .bk-search-pill,
+    .bk-facilities__grid,
+    .bk-plans__grid,
+    .bk-footer__grid,
+    .bk-offer-item__details ul {
+        grid-template-columns: 1fr;
+    }
+    .bk-rooms-track {
+        grid-auto-columns: 88%;
+    }
+    .bk-testi-card {
+        padding: 30px 24px 74px;
+    }
+    .bk-testi-card__nav {
+        right: 24px;
+        bottom: 20px;
+    }
+    .bk-gold-ribbon__inner {
+        font-size: 16px;
+        justify-content: center;
+        text-align: center;
+    }
+}
