@@ -2942,6 +2942,80 @@
     display: none !important;
 }
 
+/* Native category sort row is replaced by the Bookora filter bar */
+.catSortBlock,
+.sortBlockHeading {
+    display: none !important;
+}
+
+/* Bookora room listing cards (All Listings / Search Result) */
+#category_data_cont .room_cont,
+.room_cont {
+    background: var(--bk2-white);
+    border: 1px solid rgba(20, 17, 13, 0.08);
+    border-radius: var(--bk2-radius);
+    overflow: hidden;
+    margin: 0 12px 26px;
+    padding: 0;
+    box-shadow: 0 10px 30px rgba(20, 17, 13, 0.05);
+    transition: transform 0.28s ease, box-shadow 0.28s ease;
+}
+
+.room_cont:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--bk2-shadow);
+}
+
+.room_cont .room-type-image {
+    width: 100%;
+    height: 240px;
+    object-fit: cover;
+    border-radius: var(--bk2-radius) 0 0 var(--bk2-radius);
+}
+
+.room_cont .rm_heading {
+    font-family: var(--bk2-serif);
+    font-size: 25px;
+    font-weight: 600;
+    color: var(--bk2-ink);
+    margin: 6px 0 10px;
+    padding: 0;
+}
+
+.room_cont .rm_heading:hover {
+    color: var(--bk2-gold);
+}
+
+.room_cont .rm_price_val {
+    font-family: var(--bk2-serif);
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--bk2-gold);
+}
+
+.room_cont .rm_price_txt {
+    color: var(--bk2-muted);
+    font-size: 12.5px;
+}
+
+.room_cont .room_type_old_price {
+    text-decoration: line-through;
+    color: var(--bk2-muted);
+    font-size: 16px;
+    margin-right: 8px;
+}
+
+.room_cont .capa_txt {
+    color: var(--bk2-muted);
+    font-size: 12.5px;
+    letter-spacing: 0.6px;
+}
+
+.room_cont .capa_data {
+    color: var(--bk2-ink-2);
+    font-weight: 600;
+}
+
 .bk-h2 ~ #columns .product_list .product-miniature,
 .bk-h2 ~ .columns-container .product-miniature {
     border-radius: var(--bk2-radius);

@@ -453,6 +453,21 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Go Back button (room detail)                                        */
+    /* ------------------------------------------------------------------ */
+    function initGoBack() {
+        qsa('[data-bk-go-back]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.location.href = window.lvhBookoraSearchUrl || '/';
+                }
+            });
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Share links + copy toast                                            */
     /* ------------------------------------------------------------------ */
     function initShare() {
@@ -621,7 +636,7 @@
 
     /* ------------------------------------------------------------------ */
     /* Listings filter bar (category page): price filter, count, views,   */
-    /* sort                                                               */
+    /* sort (client-side on the live QloApps .room_cont list)             */
     /* ------------------------------------------------------------------ */
     function initListingFilters() {
         var root = qs('[data-bk-filters]');
@@ -629,9 +644,10 @@
             return;
         }
 
-        // Locate the live QloApps room list
-        var list = qs('#center_column .product_list') || qs('.product_list') || qs('#center_column');
-        var cards = list ? qsa('li.product-miniature, .product-miniature, .ajax_block_product', list) : [];
+        // Locate the live QloApps room list (QloApps 1.8 uses .room_cont rows)
+        var list = qs('#category_data_cont') || qs('#center_column .product_list') ||
+            qs('.product_list') || qs('#center_column');
+        var cards = list ? qsa('.room_cont, li.product-miniature, .product-miniature, .ajax_block_product', list) : [];
 
         var countEl = qs('[data-bk-items-found]', root);
         var minInput = qs('[data-bk-price-min]', root);
@@ -641,12 +657,20 @@
             if (card.hasAttribute('data-bk-price')) {
                 return parseFloat(card.getAttribute('data-bk-price')) || 0;
             }
-            var txt = card.textContent || '';
+            var priceEls = card.querySelectorAll ? card.querySelectorAll('.rm_price_val') : [];
+            var txt = priceEls.length
+                ? priceEls[priceEls.length - 1].textContent
+                : (card.textContent || '');
             var m = txt.replace(/\s/g, '').match(/([0-9]+(?:[.,][0-9]{1,2})?)/g);
             if (m && m.length) {
                 return parseFloat(m[m.length - 1].replace(',', '')) || 0;
             }
             return 0;
+        };
+
+        var cardName = function (card) {
+            var el = card.querySelector ? card.querySelector('.rm_heading') : null;
+            return (el ? el.textContent : (card.textContent || '')).trim().toLowerCase();
         };
 
         var applyPriceFilter = function () {
@@ -698,25 +722,32 @@
             });
         });
 
-        // Sort By -> QloApps category controller params
+        // Sort By — reorder the live QloApps room rows client-side
         var sortSel = qs('[data-bk-sort]', root);
-        if (sortSel) {
+        if (sortSel && cards.length && list) {
             sortSel.addEventListener('change', function () {
                 var val = sortSel.value;
                 if (!val) {
                     return;
                 }
                 var parts = val.split('-');
-                var orderby = parts[0];
-                var orderway = parts[1] || 'asc';
-                try {
-                    var url = new URL(window.location.href);
-                    url.searchParams.set('orderby', orderby);
-                    url.searchParams.set('orderway', orderway);
-                    window.location.href = url.toString();
-                } catch (e) {
-                    window.location.search = '&orderby=' + orderby + '&orderway=' + orderway;
-                }
+                var key = parts[0];
+                var dir = (parts[1] === 'desc') ? -1 : 1;
+                var original = cards.slice();
+
+                cards.sort(function (a, b) {
+                    if (key === 'price') {
+                        return (cardPrice(a) - cardPrice(b)) * dir;
+                    }
+                    if (key === 'name') {
+                        return cardName(a).localeCompare(cardName(b)) * dir;
+                    }
+                    // date / position — restore DOM order (asc), reversed for desc
+                    return (original.indexOf(a) - original.indexOf(b)) * dir;
+                });
+                cards.forEach(function (card) {
+                    list.appendChild(card);
+                });
             });
         }
     }
@@ -788,6 +819,7 @@
         initFeaturedSlider();
         initTestimonialsSlider();
         initBookmarks();
+        initGoBack();
         initShare();
         initReportModal();
         initGallery();

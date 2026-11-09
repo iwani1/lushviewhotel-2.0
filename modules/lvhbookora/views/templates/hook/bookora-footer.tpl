@@ -118,4 +118,16 @@
 
     <!-- ============ Share toast ============ -->
     <div id="bk-share-toast" class="bk-share-toast" aria-live="polite">Link copied to clipboard</div>
+
+    <!-- ============ Shared Gallery Lightbox ============ -->
+    <div id="bk-lightbox" class="bk-lightbox" aria-hidden="true">
+        <div class="bk-lightbox__backdrop" data-bk-close-lightbox></div>
+        <figure class="bk-lightbox__figure">
+            <img src="" alt="Gallery image">
+            <figcaption></figcaption>
+        </figure>
+        <button type="button" class="bk-lightbox__close" data-bk-close-lightbox aria-label="Close">&times;</button>
+        <button type="button" class="bk-lightbox__prev" data-bk-lightbox-prev aria-label="Previous">‹</button>
+        <button type="button" class="bk-lightbox__next" data-bk-lightbox-next aria-label="Next">›</button>
+    </div>
 </div>
