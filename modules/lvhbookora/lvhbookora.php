@@ -31,7 +31,9 @@ if (!defined('_PS_VERSION_')) {
 
 require_once dirname(__FILE__) . '/classes/LvhBookoraRouteMap.php';
 require_once dirname(__FILE__) . '/classes/LvhBookoraDataProvider.php';
-require_once dirname(__FILE__) . '/classes/LvhBookoraImageManager.php';
+if (file_exists(dirname(__FILE__) . '/classes/LvhBookoraImageManager.php')) {
+    require_once dirname(__FILE__) . '/classes/LvhBookoraImageManager.php';
+}
 
 class LvhBookora extends Module
 {
@@ -566,6 +568,11 @@ class LvhBookora extends Module
             $output .= $this->processPhotoLibrary();
         }
 
+        if (!class_exists('LvhBookoraImageManager')) {
+            $output .= $this->displayWarning($this->l('Photo library files are missing (LvhBookoraImageManager.php). Upload the complete lvhbookora module files.'));
+            return $output . $this->renderConfigForm();
+        }
+
         return $output . $this->renderPhotoLibrary() . $this->renderConfigForm();
     }
 
@@ -577,6 +584,9 @@ class LvhBookora extends Module
      */
     protected function processPhotoLibrary()
     {
+        if (!class_exists('LvhBookoraImageManager')) {
+            return $this->displayError($this->l('Photo library files are missing. Upload the complete lvhbookora module files.'));
+        }
         $ok = 0;
         $err = array();
 
