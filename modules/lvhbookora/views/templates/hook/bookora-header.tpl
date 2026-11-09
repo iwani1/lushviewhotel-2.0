@@ -47,7 +47,7 @@
     </div>
 
     <!-- Main Sticky Bookora Navigation Bar -->
-    <div id="bk-navbar" class="bk-navbar">
+    <div id="bk-navbar" class="bk-navbar{if $bk.is_home} is-over-hero{/if}">
         <div class="bk-container bk-navbar__inner">
             <a href="{$bk.home_url|escape:'html':'UTF-8'}" class="bk-brand" title="{$bk.hotel_name|escape:'html':'UTF-8'}">
                 {if $bk.logo_url}

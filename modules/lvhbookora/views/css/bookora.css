@@ -3047,3 +3047,290 @@ body:not(#index) #wk_search_submit:hover,
         bottom: 18px;
     }
 }
+
+/* ---------- Home 2 additions (demo-faithful) -------------------------- */
+
+/* Header floating transparent over the hero (until scrolled) */
+.bk-navbar.is-over-hero:not(.is-fixed) {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    background: transparent;
+    box-shadow: none;
+    border: none;
+}
+
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-nav__link,
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-signin-link,
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-brand__name {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-nav__link:hover,
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-nav__link.is-active {
+    color: var(--bk2-prime, #c29d68);
+}
+
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-cart-pill {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.bk-navbar.is-over-hero:not(.is-fixed) .bk-burger span {
+    background: #fff;
+}
+
+/* Showcase: thumbs column + reviews label */
+.bk2-showcase__grid {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 44px;
+    align-items: center;
+    width: 100%;
+}
+
+.bk2-showcase__grid .bk2-showcase__content {
+    padding: 90px 0;
+    max-width: 560px;
+}
+
+.bk2-showcase__thumbs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.bk2-showcase__thumb {
+    width: 118px;
+    height: 148px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    overflow: hidden;
+    background: none;
+    cursor: pointer;
+    opacity: 0.62;
+    transition: all 0.3s ease;
+}
+
+.bk2-showcase__thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bk2-showcase__thumb.is-active,
+.bk2-showcase__thumb:hover {
+    border-color: var(--bk2-prime);
+    opacity: 1;
+}
+
+.bk2-showcase__reviews {
+    margin-bottom: 14px;
+    color: var(--bk2-prime);
+    font-family: var(--bk-sans);
+    font-size: 12.5px;
+    letter-spacing: 2.2px;
+    text-transform: uppercase;
+}
+
+/* Check availability & book Your Stay */
+.bk2-checkav {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    padding: 110px 0;
+}
+
+.bk2-checkav__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, rgba(0, 32, 32, 0.9) 0%, rgba(0, 24, 24, 0.62) 100%);
+}
+
+.bk2-checkav__grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 50px;
+    align-items: center;
+}
+
+.bk2-checkav__title {
+    margin: 0 0 30px;
+    font-family: var(--bk-serif);
+    font-size: clamp(34px, 4.4vw, 58px);
+    font-weight: 700;
+    line-height: 1.12;
+    color: #fff;
+}
+
+.bk2-checkav__form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.bk2-checkav__field {
+    flex: 1 1 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.bk2-checkav__field label {
+    font-family: var(--bk-sans);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.bk2-checkav__field input,
+.bk2-checkav__field select {
+    width: 100%;
+    padding: 12px 13px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-family: var(--bk-sans);
+    font-size: 14px;
+}
+
+.bk2-checkav__field select option {
+    color: #222;
+}
+
+.bk2-checkav__submit {
+    padding: 14px 30px;
+    border: 1px solid var(--bk2-prime);
+    border-radius: 35px;
+    background: var(--bk2-prime);
+    color: #fff;
+    font-family: var(--bk-sans);
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.bk2-checkav__submit:hover {
+    background: #fff;
+    border-color: #fff;
+    color: var(--bk2-teal);
+}
+
+.bk2-checkav__features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 18px;
+}
+
+.bk2-checkav__features li {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    color: #fff;
+    font-family: var(--bk-serif);
+    font-size: 21px;
+    font-weight: 600;
+}
+
+.bk2-checkav__features svg {
+    color: var(--bk2-prime);
+    flex-shrink: 0;
+}
+
+/* Team hover social squares (theme bk-team-item) */
+.bk2-team-item__img {
+    position: relative;
+}
+
+.bk2-team-item__social {
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bk2-team-item__social a {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: #fff;
+    color: var(--bk2-prime);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+}
+
+.bk2-team-item:hover .bk2-team-item__social a {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.bk2-team-item:hover .bk2-team-item__social a:nth-child(1) { transition-delay: 0.05s; }
+.bk2-team-item:hover .bk2-team-item__social a:nth-child(2) { transition-delay: 0.1s; }
+.bk2-team-item:hover .bk2-team-item__social a:nth-child(3) { transition-delay: 0.15s; }
+.bk2-team-item:hover .bk2-team-item__social a:nth-child(4) { transition-delay: 0.2s; }
+
+.bk2-team-item__social a:hover {
+    background: var(--bk2-prime);
+    color: #fff;
+}
+
+/* Blog heading extra-large (theme bk-blog2 80px) + View More */
+.bk2-sec-title__main--xl {
+    font-size: clamp(44px, 5.6vw, 80px);
+    font-weight: 700;
+}
+
+.bk2-sec-title__cta {
+    margin-top: 22px;
+}
+
+@media (max-width: 1024px) {
+    .bk2-checkav__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .bk2-showcase__thumbs {
+        flex-direction: row;
+    }
+
+    .bk2-showcase__grid {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
+    .bk2-showcase__grid .bk2-showcase__content {
+        padding: 60px 0 90px;
+    }
+
+    .bk2-showcase__thumb {
+        width: 86px;
+        height: 106px;
+    }
+}

@@ -256,6 +256,18 @@ class LvhBookoraDataProvider
         $plans = self::buildPricingPlans($bedrooms, $common);
         $testimonials = self::loadTestimonials($context, $idLang);
 
+        // Theme's sec_title pattern: second half of the About heading renders
+        // at 0.6 opacity (split on the first comma).
+        $aboutTitle = isset($common['cfg']['LVH_BK_ABOUT_TITLE']) ? (string) $common['cfg']['LVH_BK_ABOUT_TITLE'] : '';
+        $commaPos = strpos($aboutTitle, ',');
+        if ($commaPos !== false) {
+            $aboutTitleA = trim(substr($aboutTitle, 0, $commaPos + 1));
+            $aboutTitleB = trim(substr($aboutTitle, $commaPos + 1));
+        } else {
+            $aboutTitleA = $aboutTitle;
+            $aboutTitleB = '';
+        }
+
         $gallerySlice = !empty($interiorImages) ? array_slice($interiorImages, 0, 8) : array();
         if (empty($gallerySlice)) {
             foreach ($pool as $idx => $u) {
@@ -270,6 +282,8 @@ class LvhBookoraDataProvider
         }
 
         return array(
+            'about_title_a' => $aboutTitleA,
+            'about_title_b' => $aboutTitleB,
             'hero_image' => self::photoOr($context, 'hero', $heroImage),
             'about_main' => self::photoOr($context, 'about_main', $pickPhoto(1)),
             'about_second' => self::photoOr($context, 'about_second', $pickPhoto(2)),
@@ -732,10 +746,10 @@ class LvhBookoraDataProvider
     protected static function buildServices(Context $context, array $common, $pickPhoto)
     {
         $defs = array(
-            array('Room Booking', 'Browse live availability across our rooms and suites and confirm your stay in seconds with instant direct booking.', $common['search_url']),
-            array('Fitness Center', 'Keep up your routine in our fully equipped fitness center, open daily for in-house guests.', $common['contact_url']),
-            array('24/7 Room Service', 'Day or night, enjoy freshly prepared meals, snacks, and beverages delivered straight to your room.', $common['contact_url']),
-            array('Swimming Pool Access', 'Unwind by our serene outdoor swimming pool — a favourite spot for relaxation and leisure.', $common['search_url']),
+            array('Room Booking', 'Book your preferred room effortlessly with instant confirmation, options, & the price guaranteed always.', $common['search_url']),
+            array('Fitness Center', 'Relax, refresh, and rejuvenate your body and mind with our premium spa and wellness treatments.', $common['contact_url']),
+            array('24/7 Room Service', 'Enjoy round-the-clock room service delivering delicious meals, beverages, & essentials directly anytime.', $common['contact_url']),
+            array('Swimming Pool Access', 'Enjoy refreshing moments in our crystal-clear swimming pool, perfect relaxation, leisure, & sunny afternoons.', $common['search_url']),
         );
         $out = array();
         $i = 0;
@@ -759,14 +773,14 @@ class LvhBookoraDataProvider
     protected static function buildFacilities()
     {
         return array(
-            array('icon' => 'bed', 'title' => 'Rooms & Suites', 'desc' => 'Air-conditioned rooms and suites with plush bedding, smart TVs, high-speed Wi-Fi, and serene views.'),
-            array('icon' => 'shield', 'title' => '24-Hour Security & Power', 'desc' => 'Round-the-clock security, gated parking, CCTV coverage, and automatic standby power.'),
-            array('icon' => 'dining', 'title' => 'Restaurant & Lounge Bar', 'desc' => 'Ghanaian favourites and continental dishes crafted from fine local ingredients.'),
-            array('icon' => 'conference', 'title' => 'Conference & Event Hall', 'desc' => 'Executive meetings, trainings, and summits for up to 60 delegates with full AV support.'),
-            array('icon' => 'pool', 'title' => 'Swimming Pool', 'desc' => 'A serene outdoor pool and lounging deck reserved for in-house guests.'),
-            array('icon' => 'gym', 'title' => 'Fitness Center', 'desc' => 'A fully equipped gym to keep your routine going throughout your stay.'),
-            array('icon' => 'wifi', 'title' => 'High-Speed Wi-Fi', 'desc' => 'Complimentary fast internet across every room, lobby, and event space.'),
-            array('icon' => 'shuttle', 'title' => 'Airport Shuttle', 'desc' => 'Reliable airport transfers and chauffeur services arranged on request.'),
+            array('icon' => 'gym', 'title' => 'Gym Training Grounds', 'desc' => 'Relax and unwind in our crystal-clear swimming pool, perfect for leisure, fun, and refreshing moments.'),
+            array('icon' => 'wifi', 'title' => 'World-Class Amenities', 'desc' => 'Experience comfort and elegance with services designed to exceed your expectations.'),
+            array('icon' => 'bed', 'title' => 'Stay With Comfort', 'desc' => 'Enjoy modern interiors, premium bedding, and peaceful spaces for perfect rest.'),
+            array('icon' => 'conference', 'title' => 'Designed For Your Comfort', 'desc' => 'Every detail of our hotel is thoughtfully created to ensure maximum comfort and relaxation.'),
+            array('icon' => 'dining', 'title' => 'Exclusive Guest Services', 'desc' => 'Enjoy personalized attention and unique experiences during your stay with us.'),
+            array('icon' => 'shield', 'title' => 'Modern Facilities For You', 'desc' => 'Enjoy seamless technology, contemporary design, and unmatched convenience.'),
+            array('icon' => 'pool', 'title' => 'Where Comfort Meets Style', 'desc' => 'Experience a perfect blend of modern elegance and cozy comfort designed for ultimate relaxation.'),
+            array('icon' => 'shuttle', 'title' => 'Enjoy Every Moment', 'desc' => 'Enjoy every second of your stay with comfort, elegance, and unforgettable hotel experiences.'),
         );
     }
 

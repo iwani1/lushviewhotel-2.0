@@ -129,10 +129,17 @@
      * to QloApps 1.8.0's exact room-search URL with occupancy parameters.
      */
     function initAvailabilityForm() {
-        var form = document.getElementById('bk-availability-form');
-        var inInput = document.getElementById('bk-checkin');
-        var outInput = document.getElementById('bk-checkout');
-        var guestsSel = document.getElementById('bk-guests');
+        var forms = document.querySelectorAll('#bk-availability-form, [data-bk-avail-form]');
+        for (var f = 0; f < forms.length; f++) {
+            bindAvailability(forms[f]);
+        }
+    }
+
+    function bindAvailability(form) {
+        var inInput = form.querySelector('[name="date_from"]');
+        var outInput = form.querySelector('[name="date_to"]');
+        var guestsSel = form.querySelector('[name="bk_guests"]');
+        var roomsSel = form.querySelector('[name="bk_rooms_count"]');
 
         if (!form || !inInput || !outInput) {
             return;
@@ -194,8 +201,11 @@
             ];
 
             if (typeof window.lvhBookoraUseOccupancy === 'undefined' || window.lvhBookoraUseOccupancy) {
-                params.push(encodeURIComponent('occupancy[0][adults]') + '=' + encodeURIComponent(String(adults)));
-                params.push(encodeURIComponent('occupancy[0][children]') + '=' + encodeURIComponent(String(children)));
+                var rooms = (roomsSel && roomsSel.value) ? (parseInt(roomsSel.value, 10) || 1) : 1;
+                for (var r = 0; r < rooms; r++) {
+                    params.push(encodeURIComponent('occupancy[' + r + '][adults]') + '=' + encodeURIComponent(String(adults)));
+                    params.push(encodeURIComponent('occupancy[' + r + '][children]') + '=' + encodeURIComponent(String(children)));
+                }
             }
 
             var sep = baseUrl.indexOf('?') !== -1 ? '&' : '?';
@@ -313,6 +323,7 @@
 
         var prevBtn = box.querySelector('[data-bk-testi-prev]');
         var nextBtn = box.querySelector('[data-bk-testi-next]');
+        var gotos = box.querySelectorAll('[data-bk-testi-goto]');
         var index = 0;
         var timer = null;
 
@@ -348,6 +359,14 @@
                 show(index + 1);
                 startAuto();
             });
+        }
+        for (var g = 0; g < gotos.length; g++) {
+            (function (gi) {
+                gotos[gi].addEventListener('click', function () {
+                    show(gi);
+                    startAuto();
+                });
+            })(g);
         }
 
         box.addEventListener('mouseenter', stopAuto);

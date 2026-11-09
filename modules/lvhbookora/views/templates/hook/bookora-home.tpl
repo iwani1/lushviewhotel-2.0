@@ -90,8 +90,8 @@
             <div class="bk2-ab2__right">
                 <div class="bk2-ab2__top">
                     <div class="bk2-ab2__head">
-                        <div class="bk2-slug"><i></i>About {$bk.hotel_name|escape:'html':'UTF-8'}<i></i></div>
-                        <h2 class="bk2-ab2__title">{$bk.cfg.LVH_BK_ABOUT_TITLE|escape:'html':'UTF-8'}</h2>
+                        <div class="bk2-slug"><i></i>About Us<i></i></div>
+                        <h2 class="bk2-ab2__title">{$bk_home.about_title_a|escape:'html':'UTF-8'}{if $bk_home.about_title_b} <span>{$bk_home.about_title_b|escape:'html':'UTF-8'}</span>{/if}</h2>
                     </div>
                     <div class="bk2-ab2__desc">
                         <p>{$bk.cfg.LVH_BK_ABOUT_BODY|escape:'html':'UTF-8'}</p>
@@ -215,21 +215,20 @@
                 {foreach from=$bk_home.featured item=rm name=ftLoop}
                     <div class="bk2-showcase__slide{if $smarty.foreach.ftLoop.first} is-active{/if}" data-bk-testi-slide style="background-image: url('{$rm.image|escape:'html':'UTF-8'}');">
                         <div class="bk2-showcase__overlay"></div>
-                        <div class="bk-container bk2-showcase__content">
-                            <div class="bk2-slug bk2-slug--light"><i></i>Featured Stay<i></i></div>
-                            <h2 class="bk2-showcase__title">{$rm.name|escape:'html':'UTF-8'}</h2>
-                            <p class="bk2-showcase__desc">{$rm.short_desc|escape:'html':'UTF-8'}</p>
-                            <div class="bk2-showcase__price">
-                                <small>PRICE/</small>
-                                <strong>{$bk.currency_sign|escape:'html':'UTF-8'}{$rm.price_formatted|escape:'html':'UTF-8'}</strong>
-                                <small>Night</small>
+                        <div class="bk-container bk2-showcase__grid">
+                            <div class="bk2-showcase__thumbs">
+                                {foreach from=$bk_home.featured item=th name=thLoop}
+                                    <button type="button" class="bk2-showcase__thumb{if $smarty.foreach.thLoop.first} is-active{/if}" data-bk-testi-goto aria-label="Show {$th.name|escape:'html':'UTF-8'}">
+                                        <img src="{$th.image|escape:'html':'UTF-8'}" alt="{$th.name|escape:'html':'UTF-8'}" loading="lazy">
+                                    </button>
+                                {/foreach}
                             </div>
-                            <ul class="bk2-showcase__meta">
-                                <li>1–{$rm.max_guests|intval} Persons</li>
-                                <li>{$rm.bath_label|escape:'html':'UTF-8'}</li>
-                                <li>{$rm.beds_label|escape:'html':'UTF-8'}</li>
-                            </ul>
-                            <a href="{$rm.book_url|escape:'html':'UTF-8'}" class="bk2-btn-gold">Book This Room</a>
+                            <div class="bk2-showcase__content">
+                                <div class="bk2-showcase__reviews">// {$bk.hotel_name|escape:'html':'UTF-8'} Guest Reviews</div>
+                                <h2 class="bk2-showcase__title">{$rm.name|escape:'html':'UTF-8'}</h2>
+                                <p class="bk2-showcase__desc">{$rm.short_desc|escape:'html':'UTF-8'}</p>
+                                <a href="{$rm.book_url|escape:'html':'UTF-8'}" class="bk2-btn-gold">Booking Now</a>
+                            </div>
                         </div>
                     </div>
                 {/foreach}
@@ -284,6 +283,65 @@
     </section>
 
     <!-- ===================================================================
+         6b. Check availability & book Your Stay (demo Home 2 booking block)
+         =================================================================== -->
+    <section class="bk2-checkav" style="background-image: url('{$bk_home.hero_image|escape:'html':'UTF-8'}');">
+        <div class="bk2-checkav__overlay"></div>
+        <div class="bk-container bk2-checkav__grid">
+            <div class="bk2-checkav__left">
+                <h2 class="bk2-checkav__title">Check availability &amp;<br>book Your Stay</h2>
+                <form class="bk2-checkav__form" data-bk-avail-form action="{$bk.search_url|escape:'html':'UTF-8'}" method="get">
+                    <div class="bk2-checkav__field">
+                        <label for="bk2-checkin">Check-In</label>
+                        <input type="date" id="bk2-checkin" name="date_from" value="{$bk.default_checkin|escape:'html':'UTF-8'}" min="{$bk.default_checkin|escape:'html':'UTF-8'}" required>
+                    </div>
+                    <div class="bk2-checkav__field">
+                        <label for="bk2-checkout">Check-Out</label>
+                        <input type="date" id="bk2-checkout" name="date_to" value="{$bk.default_checkout|escape:'html':'UTF-8'}" min="{$bk.default_checkin|escape:'html':'UTF-8'}" required>
+                    </div>
+                    <div class="bk2-checkav__field">
+                        <label for="bk2-guests">Guests</label>
+                        <select id="bk2-guests" name="bk_guests">
+                            <option value="1-0">1 Person</option>
+                            <option value="2-0" selected="selected">2 Persons</option>
+                            <option value="3-0">3 Persons</option>
+                            <option value="4-0">4 Persons</option>
+                        </select>
+                    </div>
+                    <div class="bk2-checkav__field">
+                        <label for="bk2-rooms">Rooms</label>
+                        <select id="bk2-rooms" name="bk_rooms_count">
+                            <option value="1" selected="selected">1 Room</option>
+                            <option value="2">2 Rooms</option>
+                            <option value="3">3 Rooms</option>
+                            <option value="4">4 Rooms</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="bk2-checkav__submit">Check Now</button>
+                </form>
+            </div>
+            <ul class="bk2-checkav__features">
+                <li>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                    24/7 Concierge Service
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                    Wellness &amp; Spa Center
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                    Gourmet On-Site Dining
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                    Rooftop Pool &amp; Lounge
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- ===================================================================
          7. Our Expert — bk-team cards
          =================================================================== -->
     <section class="bk2-team">
@@ -299,6 +357,12 @@
                     <article class="bk2-team-item">
                         <div class="bk2-team-item__img">
                             <img src="{$tm.image|escape:'html':'UTF-8'}" alt="{$tm.name|escape:'html':'UTF-8'}" loading="lazy">
+                            <div class="bk2-team-item__social">
+                                <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.326-.043-1.557-.14-2.857-.14C11.928 2 10 3.657 10 6.7v2.8H7v4h3V22h4v-8.5z"/></svg></a>
+                                <a href="#" aria-label="X"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+                                <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></a>
+                                <a href="mailto:{$tm.mail|escape:'html':'UTF-8'}" aria-label="Email"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></a>
+                            </div>
                         </div>
                         <div class="bk2-team-item__text">
                             <h3>{$tm.name|escape:'html':'UTF-8'}</h3>
@@ -323,7 +387,7 @@
         <div class="bk-container bk-testimonials__inner">
             <div class="bk-testi-card" data-bk-testi-slider>
                 <div class="bk2-slug"><i></i>Testimonials<i></i></div>
-                <h2 class="bk2-sec-title__main" style="margin-bottom: 26px;">What Our <span>Guests Say</span></h2>
+                <h2 class="bk2-sec-title__main" style="margin-bottom: 26px;">Testimonial</h2>
                 <div class="bk-testi-card__stars" aria-label="5 out of 5 stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
 
                 <div class="bk-testi-slides">
@@ -365,8 +429,11 @@
             <div class="bk-container">
                 <div class="bk2-sec-title bk2-sec-title--center">
                     <div class="bk2-slug"><i></i>Trending Topics<i></i></div>
-                    <h2 class="bk2-sec-title__main">Hotel <span>Articles</span></h2>
+                    <h2 class="bk2-sec-title__main bk2-sec-title__main--xl">Hotel <span>Articles</span></h2>
                     <p>Experience the perfect blend of comfort, style, and hospitality.</p>
+                    <div class="bk2-sec-title__cta">
+                        <a href="{$bk.search_url|escape:'html':'UTF-8'}" class="bk2-btn-outline">View More</a>
+                    </div>
                 </div>
 
                 <div class="bk2-blog__grid">
